@@ -37,7 +37,7 @@ python start_with_redis.py
 
 ### 启动监控仪表板
 ```bash
-python mini_stock/ministock_dash_board.py
+python trading_dashboard.py
 ```
 
 ### 测试Redis功能
@@ -137,8 +137,8 @@ curl -X POST "http://localhost:5000/clear_cache"
 ### 核心文件
 - `mini_stock/monitor_rules.py`: 监控规则管理器
 - `mini_stock/market_data_service.py`: 集成了监控功能的市场数据服务
-- `mini_stock/ministock_dash_board.py`: 统一监控仪表板（已集成实时提示）
-- `mini_stock/layouts.py`: 页面布局定义
+- `trading_dashboard.py`: 统一交易监控仪表板（已集成实时提示）
+- `dashboard/layouts.py`: 页面布局定义
 - `start_monitor_system.py`: 系统启动器
 
 ### 测试文件
