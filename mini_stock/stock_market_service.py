@@ -96,8 +96,9 @@ class StockMarketService:
     def _update_market_data(self):
         """更新市场数据的后台线程（用监控日期）"""
         # 使用 TradingTimeUtils 获取最新数据
-        self.subscribe_all()
-        time.sleep(5)
+        if TradingTimeUtils.is_trading_time():
+            self.subscribe_all()
+            time.sleep(5)
 
         while self.running:
             try:

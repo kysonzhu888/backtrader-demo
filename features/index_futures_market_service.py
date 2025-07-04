@@ -91,8 +91,9 @@ class IndexFuturesMarketService:
 
     def _update_data(self):
         """后台定时批量拉取期货行情数据，完全对齐 StockMarketService 的 _update_market_data"""
-        self.subscribe_all()
-        time.sleep(5)
+        if TradingTimeUtils.is_trading_time():
+            self.subscribe_all()
+            time.sleep(5)
 
         while self.running:
             try:
