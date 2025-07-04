@@ -1,0 +1,10 @@
+redis>=4.5.0
+flask>=2.3.0
+pandas>=1.5.0
+numpy>=1.21.0
+dash>=2.10.0
+dash-bootstrap-components>=1.4.0
+plotly>=5.15.0
+xtquant
+werkzeug>=2.3.0
+requests>=2.28.0 
