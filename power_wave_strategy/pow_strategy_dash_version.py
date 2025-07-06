@@ -1,11 +1,8 @@
-import logging
-
 import environment
 import os
 
 from dash import Dash, dcc, html, Input, Output
 import dash_bootstrap_components as dbc
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -13,7 +10,7 @@ import pandas as pd
 import numpy as np
 from power_wave import PowerWave
 
-from back_trace_paradigm import HistoricalDataLoader
+from power_wave_strategy.back_trace_paradigm import HistoricalDataLoader
 
 app = Dash(external_stylesheets=[dbc.themes.CYBORG])
 

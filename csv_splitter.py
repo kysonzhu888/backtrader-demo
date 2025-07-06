@@ -1,8 +1,7 @@
 import pandas as pd
 import os
-from datetime import datetime
 import logging
-from back_trace_paradigm import FilePathManager
+from power_wave_strategy.back_trace_paradigm import FilePathManager
 
 class CsvSplitter:
     """CSV文件拆分工具类"""

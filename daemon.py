@@ -32,7 +32,7 @@ PROCESS_CONFIG = {
     "regular_cleanup_db.py": "regular_cleanup_db.py",
     "hk_top10_broadcaster.py": "hk_top10_broadcaster.py",
 
-    "pow_wave_strategy.py": "pow_wave_strategy.py",
+    # "pow_wave_strategy.py": "pow_wave_strategy.py",
 
     # "features_min_monitor.py": "features_min_monitor.py",
     "if_amount_realtime.py":"if_amount_realtime.py",
