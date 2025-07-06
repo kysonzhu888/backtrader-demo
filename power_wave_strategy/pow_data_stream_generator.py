@@ -4,7 +4,7 @@ import os
 import pandas as pd
 
 import environment
-from back_trace_paradigm import HistoricalDataLoader, DataProcessor
+from power_wave_strategy.back_trace_paradigm import HistoricalDataLoader, DataProcessor
 from database_helper import DatabaseHelper
 
 
