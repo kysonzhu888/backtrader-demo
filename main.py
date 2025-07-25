@@ -19,6 +19,8 @@ from app import get_app, register_blueprint, run_app
 from mini_stock.stock_blueprint import stock_blueprint, init_market_service
 from features.futures_blueprint import futures_blueprint
 from features.index_futures_market_service import init_index_futures_service
+from mysterious_fund.mysterious_fund_blueprint import mysterious_fund_blueprint
+from mysterious_fund.mysterious_fund_market_service import init_mysterious_fund_service
 
 
 def main():
@@ -29,18 +31,24 @@ def main():
     app = get_app()
     
     # 初始化股票服务
+
     print("初始化股票服务...")
     report_date = datetime(2025, 6, 12)  # 可以根据需要修改日期
     init_market_service(report_date=report_date)
-    
+
     # 初始化股指期货服务
     print("初始化股指期货服务...")
     init_index_futures_service(report_date=report_date)
+    
+    # 初始化神秘资金服务
+    print("初始化神秘资金服务...")
+    init_mysterious_fund_service()
     
     # 注册蓝图
     print("注册服务蓝图...")
     register_blueprint(stock_blueprint)
     register_blueprint(futures_blueprint)
+    register_blueprint(mysterious_fund_blueprint)
     
     # 添加根路径健康检查
     @app.route('/')
@@ -50,7 +58,8 @@ def main():
             "status": "running",
             "services": {
                 "stock": "/stock",
-                "index_futures": "/futures"
+                "index_futures": "/futures",
+                "mysterious_fund": "/mysterious_fund"
             },
             "timestamp": datetime.now().isoformat()
         }
@@ -63,6 +72,7 @@ def main():
     print(f"服务启动在 http://{host}:{port}")
     print("股票服务API: /stock/*")
     print("股指期货服务API: /futures/*")
+    print("神秘资金服务API: /mysterious_fund/*")
     
     run_app(host=host, port=port, debug=debug)
 

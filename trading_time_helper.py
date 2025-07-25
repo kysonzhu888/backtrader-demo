@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, time, timedelta
 import chinese_calendar as calendar
 

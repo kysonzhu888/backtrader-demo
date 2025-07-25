@@ -18,6 +18,7 @@ from app import UPLOAD_FOLDER, allowed_file
 from xtquant import xtdata
 from mini_stock.futures_instrument_model import FuturesInstrumentModel
 from mini_stock.utils.trading_time_utils import TradingTimeUtils
+from mini_stock.utils.market_data_utils import MarketDataUtils
 from date_utils import DateUtils
 from mini_stock.utils.stock_price_utils import StockPriceUtils
 from mini_stock.futures_data_enhancer import FuturesDataEnhancer
@@ -91,9 +92,8 @@ class IndexFuturesMarketService:
 
     def _update_data(self):
         """后台定时批量拉取期货行情数据，完全对齐 StockMarketService 的 _update_market_data"""
-        if TradingTimeUtils.is_trading_time():
-            self.subscribe_all()
-            time.sleep(5)
+        self.subscribe_all()
+        time.sleep(5)
 
         while self.running:
             try:
@@ -106,7 +106,7 @@ class IndexFuturesMarketService:
                 if not code_list:
                     time.sleep(10)
                     continue
-                kline_data = TradingTimeUtils.get_latest_trading_data(code_list, DateUtils.now())
+                kline_data = MarketDataUtils.get_latest_trading_data(code_list, DateUtils.now())
                 
                 # 使用数据增强器为行情数据添加 feature 字段
                 enhanced_kline_data = FuturesDataEnhancer.enhance_kline_data(kline_data, self.futures_list)

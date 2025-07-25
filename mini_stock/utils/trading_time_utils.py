@@ -69,41 +69,6 @@ class TradingTimeUtils:
             return in_morning or in_afternoon
 
     @staticmethod
-    def get_latest_trading_data(code_list, current_date):
-        """
-        获取最新的交易数据
-        如果在交易时间内，返回实时数据
-        如果在非交易时间，返回最近的收盘价数据
-        
-        参数:
-            code_list: list, 股票代码列表
-            current_date: datetime, 当前日期
-        返回:
-            dict, 股票数据字典
-        """
-        try:
-            if TradingTimeUtils.is_trading_time():
-                # 在交易时间内，获取实时数据
-                kline_data = xtdata.get_market_data_ex([], code_list, period='tick', count=1)
-
-                if kline_data:
-                    return kline_data
-
-            # 非交易时间或获取实时数据失败，返回最近的收盘价数据
-            end_time = current_date.strftime('%Y%m%d')
-            daily_data = xtdata.get_market_data_ex([], code_list, period='1d', count=1, end_time=end_time)
-
-            if not daily_data:
-                logging.warning("获取日线数据失败")
-                return {}
-
-            return daily_data
-
-        except Exception as e:
-            logging.error(f"获取行情数据失败: {e}")
-            return {}
-
-    @staticmethod
     def get_next_trading_day(date=None):
         """
         获取下一个交易日

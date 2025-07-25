@@ -9,7 +9,7 @@ import requests
 import logging
 from date_utils import DateUtils
 import base64
-from dashboard.layouts import get_dashboard_layout, get_index_dashboard_layout
+from dashboard.layouts import get_dashboard_layout, get_index_dashboard_layout, get_mysterious_fund_dashboard_layout
 from dashboard.stock_filter_page import get_stock_filter_layout, register_callbacks
 from dashboard.market_data_client import MarketDataClient
 
@@ -114,6 +114,11 @@ class Dashboard:
                         "🔍 股票筛选",
                         id="nav-stock-filter",
                         className="nav-button"
+                    ),
+                    html.Button(
+                        "💰 神秘资金",
+                        id="nav-mysterious-fund",
+                        className="nav-button"
                     )
                 ], className="padding-20")
             ], className="sidebar"),
@@ -129,27 +134,31 @@ class Dashboard:
             [Output("page-content", "children"),
              Output("nav-dashboard", "className"),
              Output("nav-index-dashboard", "className"),
-             Output("nav-stock-filter", "className")],
+             Output("nav-stock-filter", "className"),
+             Output("nav-mysterious-fund", "className")],
             [Input("nav-dashboard", "n_clicks"),
              Input("nav-index-dashboard", "n_clicks"),
-             Input("nav-stock-filter", "n_clicks")]
+             Input("nav-stock-filter", "n_clicks"),
+             Input("nav-mysterious-fund", "n_clicks")]
         )
-        def render_page(dashboard_clicks, index_clicks, filter_clicks):
+        def render_page(dashboard_clicks, index_clicks, filter_clicks, mysterious_fund_clicks):
             ctx = dash.callback_context
             if not ctx.triggered:
                 # 默认显示仪表板
-                return get_dashboard_layout(), "nav-button active", "nav-button", "nav-button"
+                return get_dashboard_layout(), "nav-button active", "nav-button", "nav-button", "nav-button"
 
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
             if button_id == "nav-dashboard":
-                return get_dashboard_layout(), "nav-button active", "nav-button", "nav-button"
+                return get_dashboard_layout(), "nav-button active", "nav-button", "nav-button", "nav-button"
             elif button_id == "nav-index-dashboard":
-                return get_index_dashboard_layout(), "nav-button", "nav-button active", "nav-button"
+                return get_index_dashboard_layout(), "nav-button", "nav-button active", "nav-button", "nav-button"
             elif button_id == "nav-stock-filter":
-                return get_stock_filter_layout(), "nav-button", "nav-button", "nav-button active"
+                return get_stock_filter_layout(), "nav-button", "nav-button", "nav-button active", "nav-button"
+            elif button_id == "nav-mysterious-fund":
+                return get_mysterious_fund_dashboard_layout(), "nav-button", "nav-button", "nav-button", "nav-button active"
             else:
-                return get_dashboard_layout(), "nav-button active", "nav-button", "nav-button"
+                return get_dashboard_layout(), "nav-button active", "nav-button", "nav-button", "nav-button"
 
         # 仪表板回调
         @app.callback(
@@ -165,20 +174,24 @@ class Dashboard:
             [Output('today-alerts-count', 'children'),
              Output('alert-type-stats', 'children')],
             [Input('interval', 'n_intervals'),
-             Input('index-interval', 'n_intervals')]
+             Input('index-interval', 'n_intervals'),
+             Input('mysterious-fund-interval', 'n_intervals')]
         )
-        def update_alert_stats(stock_n, index_n):
+        def update_alert_stats(stock_n, index_n, mysterious_fund_n):
             ctx = dash.callback_context
             if not ctx.triggered:
                 return 0, []
             trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            
             if trigger_id == 'interval':
+                # 股票异常统计逻辑
                 today_count = self.alert_stats.get('today_alerts', 0)
                 by_type = self.alert_stats.get('by_type', {})
                 type_items = []
                 for alert_type, count in by_type.items():
                     type_items.append(html.Div(f"{alert_type}: {count}", style={'margin': '2px 0'}))
                 return today_count, type_items
+                
             elif trigger_id == 'index-interval':
                 # 股指异常统计逻辑
                 today_count = self.futures_alert_stats.get('today_alerts', 0)
@@ -187,19 +200,68 @@ class Dashboard:
                 for alert_type, count in by_type.items():
                     type_items.append(html.Div(f"{alert_type}: {count}", style={'margin': '2px 0'}))
                 return today_count, type_items
+                
+            elif trigger_id == 'mysterious-fund-interval':
+                # 神秘资金异常统计逻辑 - 优化版本
+                try:
+                    import requests
+                    import environment
+                    
+                    host = getattr(environment, 'STOCK_MARKET_SERVICE_HOST', 'localhost')
+                    port = getattr(environment, 'STOCK_MARKET_SERVICE_PORT', 5000)
+                    url = f"http://{host}:{port}/mysterious_fund/alerts/stats"
+                    
+                    response = requests.get(url, timeout=3)  # 减少超时时间
+                    if response.status_code == 200:
+                        stats = response.json()
+                        today_count = stats.get('today_alerts', 0)
+                        by_type = stats.get('by_type', {})
+                        type_items = []
+                        
+                        # 格式化异常类型显示
+                        type_display_names = {
+                            'minute_amount_exceed': '分钟成交额超限',
+                            'volume_surge': '成交量异动',
+                            'price_surge': '价格异动'
+                        }
+                        
+                        for alert_type, count in by_type.items():
+                            display_name = type_display_names.get(alert_type, alert_type)
+                            type_items.append(html.Div(
+                                f"{display_name}: {count}", 
+                                style={'margin': '2px 0', 'fontSize': '12px'}
+                            ))
+                        
+                        return today_count, type_items
+                    else:
+                        logging.warning(f"神秘资金异常统计请求失败: {response.status_code}")
+                        return 0, [html.Div("数据获取失败", style={'color': '#dc3545', 'fontSize': '12px'})]
+                        
+                except requests.exceptions.Timeout:
+                    logging.warning("神秘资金异常统计请求超时")
+                    return 0, [html.Div("请求超时", style={'color': '#ffc107', 'fontSize': '12px'})]
+                except requests.exceptions.ConnectionError:
+                    logging.warning("神秘资金异常统计连接失败")
+                    return 0, [html.Div("连接失败", style={'color': '#dc3545', 'fontSize': '12px'})]
+                except Exception as e:
+                    logging.error(f"获取神秘资金异常统计失败: {e}")
+                    return 0, [html.Div("获取失败", style={'color': '#dc3545', 'fontSize': '12px'})]
+                    
             return 0, []
 
         # 合并异常提示回调，避免重复 Output
         @app.callback(
             Output('alerts-list', 'children'),
             [Input('interval', 'n_intervals'),
-             Input('index-interval', 'n_intervals')]
+             Input('index-interval', 'n_intervals'),
+             Input('mysterious-fund-interval', 'n_intervals')]
         )
-        def update_alerts_list(stock_n, index_n):
+        def update_alerts_list(stock_n, index_n, mysterious_fund_n):
             ctx = dash.callback_context
             if not ctx.triggered:
                 return html.Div("暂无异常提示", style={'color': '#666', 'textAlign': 'center'})
             trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            
             if trigger_id == 'interval':
                 # 股票异常提示逻辑
                 if not self.alerts_data:
@@ -247,6 +309,87 @@ class Dashboard:
                     })
                     alert_items.append(alert_div)
                 return alert_items
+                
+            elif trigger_id == 'mysterious-fund-interval':
+                # 神秘资金异常提示逻辑 - 优化版本
+                try:
+                    import requests
+                    import environment
+                    
+                    host = getattr(environment, 'STOCK_MARKET_SERVICE_HOST', 'localhost')
+                    port = getattr(environment, 'STOCK_MARKET_SERVICE_PORT', 5000)
+                    url = f"http://{host}:{port}/mysterious_fund/alerts/recent?minutes=30"
+                    
+                    response = requests.get(url, timeout=3)  # 减少超时时间
+                    if response.status_code == 200:
+                        alerts_data = response.json()
+                        if not alerts_data:
+                            return html.Div("暂无异常提示", style={'color': '#666', 'textAlign': 'center'})
+                        
+                        sorted_alerts = sorted(alerts_data, key=lambda x: x.get('timestamp', ''), reverse=True)[:10]
+                        alert_items = []
+                        
+                        for alert in sorted_alerts:
+                            # 神秘资金异常使用红色高亮
+                            color = '#dc3545'  # 红色
+                            timestamp = alert.get('timestamp', '')
+                            if timestamp:
+                                try:
+                                    from datetime import datetime
+                                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                                    time_str = dt.strftime('%H:%M:%S')
+                                except:
+                                    time_str = timestamp
+                            else:
+                                time_str = '未知'
+                            
+                            # 格式化消息显示
+                            message = alert.get('message', '')
+                            amount_yi = alert.get('amount_yi', 0)
+                            threshold_yi = alert.get('threshold_yi', 1.0)
+                            
+                            # 添加成交额信息到消息中
+                            if amount_yi and threshold_yi:
+                                message = f"{message} (成交额: {amount_yi:.2f}亿, 阈值: {threshold_yi:.1f}亿)"
+                            
+                            alert_div = html.Div([
+                                html.Div(message, style={
+                                    'fontWeight': 'bold',
+                                    'color': color,
+                                    'marginBottom': '5px',
+                                    'fontSize': '13px'
+                                }),
+                                html.Div([
+                                    f"类型: {alert.get('type', '')} | ",
+                                    f"级别: {alert.get('level', '')} | ",
+                                    f"时间: {time_str}"
+                                ], style={
+                                    'fontSize': '11px',
+                                    'color': '#666'
+                                })
+                            ], style={
+                                'padding': '8px',
+                                'margin': '5px 0',
+                                'border': f'1px solid {color}',
+                                'borderRadius': '3px',
+                                'backgroundColor': '#fff'
+                            })
+                            alert_items.append(alert_div)
+                        return alert_items
+                    else:
+                        logging.warning(f"神秘资金异常提示请求失败: {response.status_code}")
+                        return html.Div("数据获取失败", style={'color': '#dc3545', 'textAlign': 'center'})
+                        
+                except requests.exceptions.Timeout:
+                    logging.warning("神秘资金异常提示请求超时")
+                    return html.Div("请求超时", style={'color': '#ffc107', 'textAlign': 'center'})
+                except requests.exceptions.ConnectionError:
+                    logging.warning("神秘资金异常提示连接失败")
+                    return html.Div("连接失败", style={'color': '#dc3545', 'textAlign': 'center'})
+                except Exception as e:
+                    logging.error(f"获取神秘资金异常提示失败: {e}")
+                    return html.Div("获取失败", style={'color': '#dc3545', 'textAlign': 'center'})
+                    
             elif trigger_id == 'index-interval':
                 # 股指异常提示逻辑
                 if not self.futures_alerts_data:
@@ -294,6 +437,7 @@ class Dashboard:
                     })
                     alert_items.append(alert_div)
                 return alert_items
+                
             return html.Div("暂无异常提示", style={'color': '#666', 'textAlign': 'center'})
 
         # 导入数据处理模块
@@ -308,6 +452,60 @@ class Dashboard:
         def update_index_table(n):
             # 使用专门的数据处理函数
             return process_futures_market_data()
+
+        # 神秘资金监控数据回调
+        @app.callback(
+            [Output('mysterious-fund-live-table', 'data'),
+             Output('mysterious-fund-last-update-time', 'children')],
+            Input('mysterious-fund-interval', 'n_intervals')
+        )
+        def update_mysterious_fund_table(n):
+            try:
+                # 获取神秘资金数据
+                import requests
+                import environment
+                
+                host = getattr(environment, 'STOCK_MARKET_SERVICE_HOST', 'localhost')
+                port = getattr(environment, 'STOCK_MARKET_SERVICE_PORT', 5000)
+                url = f"http://{host}:{port}/mysterious_fund/market_data"
+                
+                response = requests.get(url, timeout=3)  # 减少超时时间
+                if response.status_code == 200:
+                    fund_data = response.json()
+                    if fund_data and isinstance(fund_data, dict):
+                        # 格式化数据
+                        table_data = [{
+                            '基金代码': fund_data.get('code', ''),
+                            '基金名称': fund_data.get('name', ''),
+                            '最新价': fund_data.get('price', 0),
+                            '涨跌幅': fund_data.get('change_pct', 0),
+                            '涨跌额': fund_data.get('change', 0),
+                            '成交额(亿)': fund_data.get('amount_yi', 0),
+                            '更新时间': fund_data.get('time', '')
+                        }]
+                        
+                        # 添加监控阈值信息
+                        threshold = fund_data.get('minute_amount_threshold', 1.0)
+                        if threshold:
+                            table_data[0]['监控阈值(亿)'] = threshold
+                        
+                        return table_data, DateUtils.now().strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        logging.warning("神秘资金数据格式错误")
+                        return [], DateUtils.now().strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    logging.warning(f"神秘资金数据请求失败: {response.status_code}")
+                    return [], DateUtils.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+            except requests.exceptions.Timeout:
+                logging.warning("神秘资金数据请求超时")
+                return [], DateUtils.now().strftime("%Y-%m-%d %H:%M:%S")
+            except requests.exceptions.ConnectionError:
+                logging.warning("神秘资金数据连接失败")
+                return [], DateUtils.now().strftime("%Y-%m-%d %H:%M:%S")
+            except Exception as e:
+                logging.error(f"获取神秘资金数据失败: {e}")
+                return [], DateUtils.now().strftime("%Y-%m-%d %H:%M:%S")
 
         @app.callback(
             Output('upload-status', 'children'),

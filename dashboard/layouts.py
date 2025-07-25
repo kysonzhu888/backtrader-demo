@@ -175,32 +175,30 @@ def get_index_data_table():
         dash_table.DataTable(
             id='index-live-table',
             columns=[
-                {'name': '序号', 'id': '序号', 'type': 'numeric'},
                 {'name': '合约代码', 'id': '合约代码'},
-                {'name': '名称', 'id': '名称'},
+                {'name': '合约名称', 'id': '合约名称'},
                 {'name': '最新价', 'id': '最新价', 'type': 'numeric',
                  'format': {'specifier': '.2f'}},
-                {'name': '涨幅', 'id': '涨幅', 'type': 'numeric',
+                {'name': '涨跌幅', 'id': '涨跌幅', 'type': 'numeric',
                  'format': {'specifier': '.2f', 'locale': {'symbol': ['', '%']}}},
                 {'name': '涨跌额', 'id': '涨跌额', 'type': 'numeric',
                  'format': {'specifier': '.2f'}},
-                {'name': '成交量', 'id': '成交量', 'type': 'numeric',
-                 'format': {'specifier': '.0f'}},
-                {'name': '持仓量', 'id': '持仓量', 'type': 'numeric',
-                 'format': {'specifier': '.0f'}},
+                {'name': '成交量', 'id': '成交量', 'type': 'numeric'},
+                {'name': '持仓量', 'id': '持仓量', 'type': 'numeric'},
+                {'name': '更新时间', 'id': '更新时间'},
             ],
             style_data_conditional=[
                 {'if': {'filter_query': '{涨跌额} > 0', 'column_id': '涨跌额'}, 'color': 'red'},
                 {'if': {'filter_query': '{涨跌额} < 0', 'column_id': '涨跌额'}, 'color': 'green'},
-                {'if': {'filter_query': '{涨幅} > 0', 'column_id': '涨幅'}, 'color': 'red'},
-                {'if': {'filter_query': '{涨幅} < 0', 'column_id': '涨幅'}, 'color': 'green'},
+                {'if': {'filter_query': '{涨跌幅} > 0', 'column_id': '涨跌幅'}, 'color': 'red'},
+                {'if': {'filter_query': '{涨跌幅} < 0', 'column_id': '涨跌幅'}, 'color': 'green'},
             ],
             style_cell=CELL_STYLE,
             style_header=HEADER_STYLE,
             sort_action='native',
             filter_action='native',
         )
-    ], style=CONTAINER_STYLE)
+    ], className="table-container")
 
 
 def get_index_header():
@@ -226,13 +224,83 @@ def get_index_dashboard_layout():
             html.Div([
                 html.H3("股指数据", style={'marginBottom': '15px', 'color': '#333'}),
                 get_index_data_table()
-            ], style={'width': '65%', 'verticalAlign': 'top', 'paddingRight': '20px'}),
+            ], className="left-panel"),
             
             # 右侧：实时提示
             html.Div([
                 get_alert_stats(),
                 html.Hr(style={'margin': '20px 0'}),
                 get_alerts_panel()
-            ], style={'width': '35%', 'verticalAlign': 'top'})
-        ], style={'marginTop': '20px', 'display': 'flex'})
+            ], className="right-panel")
+        ], className="index-dashboard-layout")
+    ])
+
+
+def get_mysterious_fund_data_table():
+    """获取神秘资金数据表格"""
+    return html.Div([
+        dash_table.DataTable(
+            id='mysterious-fund-live-table',
+            columns=[
+                {'name': '基金代码', 'id': '基金代码'},
+                {'name': '基金名称', 'id': '基金名称'},
+                {'name': '最新价', 'id': '最新价', 'type': 'numeric',
+                 'format': {'specifier': '.3f'}},
+                {'name': '涨跌幅', 'id': '涨跌幅', 'type': 'numeric',
+                 'format': {'specifier': '.2f', 'locale': {'symbol': ['', '%']}}},
+                {'name': '涨跌额', 'id': '涨跌额', 'type': 'numeric',
+                 'format': {'specifier': '.3f'}},
+                {'name': '成交额(亿)', 'id': '成交额(亿)', 'type': 'numeric',
+                 'format': {'specifier': '.2f'}},
+                {'name': '监控阈值(亿)', 'id': '监控阈值(亿)', 'type': 'numeric',
+                 'format': {'specifier': '.1f'}},
+                {'name': '更新时间', 'id': '更新时间'},
+            ],
+            style_data_conditional=[
+                {'if': {'filter_query': '{涨跌额} > 0', 'column_id': '涨跌额'}, 'color': 'red'},
+                {'if': {'filter_query': '{涨跌额} < 0', 'column_id': '涨跌额'}, 'color': 'green'},
+                {'if': {'filter_query': '{涨跌幅} > 0', 'column_id': '涨跌幅'}, 'color': 'red'},
+                {'if': {'filter_query': '{涨跌幅} < 0', 'column_id': '涨跌幅'}, 'color': 'green'},
+                {'if': {'filter_query': '{成交额(亿)} > {监控阈值(亿)}', 'column_id': '成交额(亿)'}, 'color': '#dc3545', 'fontWeight': 'bold'},
+            ],
+            style_cell=CELL_STYLE,
+            style_header=HEADER_STYLE,
+            sort_action='native',
+            filter_action='native',
+        )
+    ], className="table-container")
+
+
+def get_mysterious_fund_header():
+    return html.H2("神秘资金监控")
+
+
+def get_mysterious_fund_last_update_info():
+    return html.Div([
+        html.Span("最后更新: "),
+        html.Span(id='mysterious-fund-last-update-time')
+    ], style={'marginBottom': '10px'})
+
+
+def get_mysterious_fund_dashboard_layout():
+    return html.Div([
+        get_mysterious_fund_header(),
+        get_mysterious_fund_last_update_info(),
+        dcc.Interval(id='mysterious-fund-interval', interval=3 * 1000, n_intervals=0),
+        
+        # 主要内容区域 - 左右分栏
+        html.Div([
+            # 左侧：神秘资金实时监控
+            html.Div([
+                html.H3("神秘资金数据", style={'marginBottom': '15px', 'color': '#333'}),
+                get_mysterious_fund_data_table()
+            ], className="left-panel"),
+            
+            # 右侧：实时提示
+            html.Div([
+                get_alert_stats(),
+                html.Hr(style={'margin': '20px 0'}),
+                get_alerts_panel()
+            ], className="right-panel")
+        ], className="mysterious-fund-layout")
     ])

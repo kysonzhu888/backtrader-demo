@@ -8,13 +8,15 @@ from mini_stock.utils.stock_price_utils import StockPriceUtils
 from utils.import_utils import setup_project_path
 setup_project_path()
 
+# 导入真实数据获取相关的模块
 from xtquant import xtdata
 from date_utils import DateUtils
+from mini_stock.utils.trading_time_utils import TradingTimeUtils
+from mini_stock.utils.market_data_utils import MarketDataUtils
 from mini_stock.mini_stock_report_reader import MiniStockReportReader
 import pandas as pd
 import environment
 from mini_stock.utils.stock_utils import StockUtils
-from mini_stock.utils.trading_time_utils import TradingTimeUtils
 from mini_stock.stock_data_manager import StockDataManager, StockFilter
 from mini_stock.redis_cache_manager import init_cache_manager, get_cache_manager
 from mini_stock.alert_detector import get_alert_detector
@@ -92,17 +94,16 @@ class StockMarketService:
             self.cache_manager.cache_preclose_data_if_not_exists(self.preclose_dict)
         except Exception as e:
             logging.error(f"缓存前收盘价数据失败: {e}")
-
     def _update_market_data(self):
+
         """更新市场数据的后台线程（用监控日期）"""
         # 使用 TradingTimeUtils 获取最新数据
-        if TradingTimeUtils.is_trading_time():
-            self.subscribe_all()
-            time.sleep(5)
+        self.subscribe_all()
+        time.sleep(5)
 
         while self.running:
             try:
-                kline_data = TradingTimeUtils.get_latest_trading_data(self.code_list, DateUtils.now())
+                kline_data = MarketDataUtils.get_latest_trading_data(self.code_list, DateUtils.now())
 
                 with self.data_lock:
                     self.last_data = kline_data

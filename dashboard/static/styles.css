@@ -183,6 +183,58 @@
     }
 }
 
+ /* 神秘资金和股指监控页面布局优化 */
+.mysterious-fund-layout,
+.index-dashboard-layout {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.mysterious-fund-layout .left-panel,
+.index-dashboard-layout .left-panel {
+    width: 60%;
+    padding-right: 15px;
+    overflow-x: auto;
+}
+
+.mysterious-fund-layout .right-panel,
+.index-dashboard-layout .right-panel {
+    width: 40%;
+    min-width: 300px;
+}
+
+/* 表格容器优化 */
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-top: 20px;
+}
+
+/* 确保表格在小屏幕上也能正常显示 */
+@media (max-width: 1200px) {
+    .mysterious-fund-layout,
+    .index-dashboard-layout {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .mysterious-fund-layout .left-panel,
+    .index-dashboard-layout .left-panel {
+        width: 100%;
+        padding-right: 0;
+    }
+    
+    .mysterious-fund-layout .right-panel,
+    .index-dashboard-layout .right-panel {
+        width: 100%;
+        min-width: auto;
+    }
+}
+
 /* 工具提示样式 */
 .tooltip {
     position: relative;
