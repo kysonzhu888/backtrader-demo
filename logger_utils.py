@@ -33,10 +33,10 @@ class Logger:
     @classmethod
     def debug(cls, message, save_to_file=False):
         """输出调试信息"""
-        logger = logging.getLogger('default')
+        logger = logging.getLogger('default_debug')
         file_handler = None
         if save_to_file:
-            file_handler = cls._get_file_handler('default')
+            file_handler = cls._get_file_handler('default_debug')
             logger.addHandler(file_handler)
         logger.debug(message)
         if save_to_file and file_handler:
@@ -45,10 +45,10 @@ class Logger:
     @classmethod
     def info(cls, message, save_to_file=False):
         """输出普通信息"""
-        logger = logging.getLogger('default')
+        logger = logging.getLogger('default_info')
         file_handler = None
         if save_to_file:
-            file_handler = cls._get_file_handler('default')
+            file_handler = cls._get_file_handler('default_info')
             logger.addHandler(file_handler)
         logger.info(message)
         if save_to_file and file_handler:
@@ -57,10 +57,10 @@ class Logger:
     @classmethod
     def warning(cls, message, save_to_file=False):
         """输出警告信息"""
-        logger = logging.getLogger('default')
+        logger = logging.getLogger('default_warning')
         file_handler = None
         if save_to_file:
-            file_handler = cls._get_file_handler('default')
+            file_handler = cls._get_file_handler('default_warning')
             logger.addHandler(file_handler)
         logger.warning(message)
         if save_to_file and file_handler:
@@ -69,10 +69,10 @@ class Logger:
     @classmethod
     def error(cls, message, save_to_file=False):
         """输出错误信息"""
-        logger = logging.getLogger('default')
+        logger = logging.getLogger('default_error')
         file_handler = None
         if save_to_file:
-            file_handler = cls._get_file_handler('default')
+            file_handler = cls._get_file_handler('default_error')
             logger.addHandler(file_handler)
         logger.error(message)
         if save_to_file and file_handler:
@@ -81,10 +81,10 @@ class Logger:
     @classmethod
     def critical(cls, message, save_to_file=False):
         """输出严重错误信息"""
-        logger = logging.getLogger('default')
+        logger = logging.getLogger('default_critical')
         file_handler = None
         if save_to_file:
-            file_handler = cls._get_file_handler('default')
+            file_handler = cls._get_file_handler('default_critical')
             logger.addHandler(file_handler)
         logger.critical(message)
         if save_to_file and file_handler:

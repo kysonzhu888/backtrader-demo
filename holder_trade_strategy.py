@@ -87,7 +87,7 @@ class HolderTradeStrategy:
         """
         now = DateUtils.now()
         # 计算距离下一个21:00的秒数
-        next_time = now.replace(hour=23, minute=30, second=0)
+        next_time = now.replace(hour=23, minute=37, second=0)
         if now >= next_time:
             next_time = next_time + timedelta(days=1)
             
@@ -96,7 +96,7 @@ class HolderTradeStrategy:
         # 如果是 debug 模式，则立刻执行
         if os.getenv('DEBUG_MODE') == '1':
             delay_seconds = 3
-            
+
         logging.info(f"下一次减持播报将在 {delay_seconds:.2f} 秒后执行 ({next_time})...")
         
         # 使用 Timer 调度任务
@@ -105,7 +105,7 @@ class HolderTradeStrategy:
     def run(self):
         """运行策略"""
         try:
-            logging.info("减持播报策略已启动，将在每天晚上9点播报")
+            logging.info("减持播报策略已启动，将在每天晚上23:37点播报")
             # 启动第一次调度
             self.schedule_next_broadcast()
             
@@ -114,7 +114,6 @@ class HolderTradeStrategy:
             
 if __name__ == "__main__":
     # 创建策略实例，使用默认日期（今天）
-    # date = datetime(2025, 6, 14)
     strategy = HolderTradeStrategy()
     
     # 运行策略
