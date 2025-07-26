@@ -20,7 +20,7 @@ def start_process(script_name):
 
 PROCESS_CONFIG = {
     # "main.py": "main.py",
-    "features_min_loader.py": "features_min_loader.py",
+    # "features_min_loader.py": "features_min_loader.py",
     "git_helper.py": "git_helper.py",
     "news_reporter.py": "news_reporter.py",
     "features_data_preloader.py": "features_data_preloader.py",

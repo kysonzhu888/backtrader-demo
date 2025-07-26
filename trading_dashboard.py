@@ -259,6 +259,7 @@ class Dashboard:
         def update_alerts_list(stock_n, index_n, mysterious_fund_n):
             ctx = dash.callback_context
             if not ctx.triggered:
+                
                 return html.Div("暂无异常提示", style={'color': '#666', 'textAlign': 'center'})
             trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
             
