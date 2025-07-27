@@ -3,7 +3,7 @@ import re
 from datetime import datetime, time, timedelta
 import chinese_calendar as calendar
 
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 
 class IntervalUtils:
     @staticmethod
