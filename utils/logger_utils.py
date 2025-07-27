@@ -13,7 +13,7 @@ class Logger:
         """获取文件处理器"""
         if cls._file_handler is None:
             # 确保日志目录存在
-            log_dir = '../data/logs'
+            log_dir = 'data/logs'
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
 

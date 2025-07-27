@@ -20,7 +20,7 @@ class HolderTradeStrategy:
         self.target_date = target_date if target_date else DateUtils.today()
 
         # 设置报告文件目录
-        self.report_dir = "../reports"
+        self.report_dir = "reports"
         if not os.path.exists(self.report_dir):
             os.makedirs(self.report_dir)
         
