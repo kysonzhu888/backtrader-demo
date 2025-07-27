@@ -38,7 +38,7 @@ class MysteriousFundAlertDetector:
         # 启动数据读取线程
         self.reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
         self.reader_thread.start()
-        
+
         logging.info("神秘资金异常检测器已启动（Redis读取模式）")
 
     def _reader_loop(self):
@@ -76,7 +76,7 @@ class MysteriousFundAlertDetector:
                 if self._is_new_alert(alert):
                     # 处理新异常
                     self._process_new_alert(alert)
-                    
+
         except Exception as e:
             logging.error(f"检查Redis异常提示失败: {e}")
 
@@ -141,7 +141,7 @@ class MysteriousFundAlertDetector:
             time_diff = (current_time - created_at).total_seconds()
             
             return time_diff <= 30  # 30秒内的认为是新异常
-            
+
         except Exception as e:
             logging.error(f"判断新异常失败: {e}")
             return False
@@ -168,7 +168,7 @@ class MysteriousFundAlertDetector:
             print(f"   成交额: {alert.get('amount_yi', 0):.2f}亿")
             print(f"   阈值: {alert.get('threshold_yi', 0):.2f}亿")
             print("-" * 50)
-            
+
         except Exception as e:
             logging.error(f"处理新异常失败: {e}")
 
@@ -239,11 +239,11 @@ class MysteriousFundAlertDetector:
                         if data_str and isinstance(data_str, str):
                             alert_data = json.loads(data_str)
                             alert_type = alert_data.get('type', 'unknown')
-                            by_type[alert_type] = by_type.get(alert_type, 0) + 1
+                by_type[alert_type] = by_type.get(alert_type, 0) + 1
                     except Exception as e:
                         logging.warning(f"解析异常提示数据失败: {e}")
                         continue
-            
+
             return {
                 'today_alerts': today_alerts,
                 'total_alerts': total_alerts,

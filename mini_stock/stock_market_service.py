@@ -10,7 +10,7 @@ setup_project_path()
 
 # 导入真实数据获取相关的模块
 from xtquant import xtdata
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 from mini_stock.utils.trading_time_utils import TradingTimeUtils
 from mini_stock.utils.market_data_utils import MarketDataUtils
 from mini_stock.mini_stock_report_reader import MiniStockReportReader
@@ -18,9 +18,9 @@ import pandas as pd
 import environment
 from mini_stock.utils.stock_utils import StockUtils
 from mini_stock.stock_data_manager import StockDataManager, StockFilter
-from mini_stock.redis_cache_manager import init_cache_manager, get_cache_manager
+from mini_stock.redis_cache_manager import init_cache_manager
 from mini_stock.alert_detector import get_alert_detector
-from mini_stock.stock_data_model import StockTickData, StockDataFactory
+from mini_stock.stock_data_model import StockDataFactory
 
 
 class StockMarketService:

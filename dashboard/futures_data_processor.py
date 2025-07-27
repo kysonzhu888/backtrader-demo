@@ -1,6 +1,6 @@
 import logging
 import requests
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 import environment
 
 

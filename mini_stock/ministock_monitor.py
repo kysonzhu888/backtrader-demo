@@ -1,12 +1,11 @@
-import os
 import time
 import logging
 import requests
 from datetime import datetime
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 import environment
 from wechat_helper import WeChatHelper
-import threading
+
 
 class MiniStockMonitor:
     def __init__(self, market_data_url="http://localhost:5000", report_dir="reports", date: datetime = None):

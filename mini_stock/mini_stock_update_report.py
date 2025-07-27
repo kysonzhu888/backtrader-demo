@@ -2,7 +2,7 @@
 import os
 import logging
 from datetime import timedelta
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 from wechat_helper import WeChatHelper
 import environment
 from stock_data_manager import StockDataManager, StockFilter

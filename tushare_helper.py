@@ -3,14 +3,10 @@ import logging
 from datetime import datetime, timedelta
 import tushare as ts
 from typing import List, Dict, Optional
-import os
-import json
 
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 from database_helper import DatabaseHelper
-from logger_utils import Logger
-from stock_cache_manager import StockCacheManager
-
+from utils.logger_utils import Logger
 
 def initialize_tushare():
     # 设置 tushare token
@@ -25,7 +21,6 @@ class TushareHelper:
         self.product_types = product_types
         self.exchange = exchange
         self.pro = initialize_tushare()
-        self.stock_cache = StockCacheManager()
 
         main_contracts = []
         for product_type in self.product_types:
@@ -282,11 +277,7 @@ class TushareHelper:
         
         # 获取所有公司代码
         ts_codes = [record['ts_code'] for record in records[:10]]
-        
-        # 从缓存获取公司名称
-        stock_cache = StockCacheManager()
-        company_dict = stock_cache.update_cache(ts_codes)
-        
+
         # 获取股价数据
         pro = initialize_tushare()
         trade_date = report_date.replace('-', '')
@@ -300,7 +291,7 @@ class TushareHelper:
         # 添加减持前10名
         report += "减持前10名:\n"
         for i, record in enumerate(records[:10], 1):
-            company_name = company_dict.get(record['ts_code'], '未知公司')
+            company_name = '未知公司'
             price = price_dict.get(record['ts_code'], 0)
             amount = record['change_vol'] * price / 10000  # 转换为万元
             total_amount += amount

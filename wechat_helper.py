@@ -5,8 +5,7 @@ import threading
 from datetime import datetime
 import hashlib
 
-import environment
-from logger_utils import Logger
+from utils.logger_utils import Logger
 
 
 class WeChatHelper:

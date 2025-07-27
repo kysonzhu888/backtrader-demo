@@ -1,17 +1,12 @@
-import environment
 import logging
 
-from date_utils import DateUtils
-from feature_info import shfe_product_types, cffex_product_types, dce_product_types, czce_product_types, \
-    ine_product_types, gfex_product_types, FeatureInfo
+from tools.feature_info import FeatureInfo
 from power_wave_backup import PowerWave
 import backtrader as bt
 
 from text_utils import TextUtils
-from trading_time_helper import TradingTimeHelper
 from wechat_helper import WeChatHelper
 from database_helper import DatabaseHelper
-import pandas as pd
 from power_wave_helper import PowerWaveHelper
 
 db_helper = DatabaseHelper()

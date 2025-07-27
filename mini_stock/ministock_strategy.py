@@ -1,16 +1,13 @@
 # coding:utf-8
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 import logging
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 from wechat_helper import WeChatHelper
 import environment
 from xtquant import xtdata
 # from xtquant.xttype import StockItem
-from xtquant import xtconstant
 import os
-from stock_data_manager import StockDataManager, StockFilter, ExchangeStats
+from stock_data_manager import StockDataManager, StockFilter
 from typing import Dict, List, Optional, Any
 
 class MiniStockStrategy:

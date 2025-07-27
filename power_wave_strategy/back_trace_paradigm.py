@@ -7,10 +7,6 @@ from database_helper import DatabaseHelper
 import pandas as pd
 import os
 import numpy as np
-import time
-
-from micro_defs import Minimum_Data_Count
-from trading_time_helper import TradingTimeHelper
 
 MAX_HISTORY_DATA_NUM = 500
 

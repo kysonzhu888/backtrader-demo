@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from threading import Timer
 
 from database_helper import DatabaseHelper
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 
 
 class FeatureDailyLoader:

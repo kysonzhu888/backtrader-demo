@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 import json
 
@@ -9,12 +9,12 @@ import json
 from utils.import_utils import setup_project_path
 setup_project_path()
 
-from .mysterious_fund_alert_detector import get_mysterious_fund_alert_detector, MysteriousFundAlertDetector
-from trading_time_helper import TradingTimeHelper
+from .mysterious_fund_alert_detector import get_mysterious_fund_alert_detector
+from utils.trading_time_helper import TradingTimeHelper
 
 # 导入真实数据获取相关的模块
 from xtquant import xtdata
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 from mini_stock.utils.trading_time_utils import TradingTimeUtils
 from mini_stock.utils.stock_price_utils import StockPriceUtils
 from mini_stock.utils.market_data_utils import MarketDataUtils
@@ -280,8 +280,7 @@ class MysteriousFundMarketService:
 
     def _convert_to_json_serializable(self, data):
         """将数据转换为JSON可序列化格式"""
-        import numpy as np
-        
+
         if isinstance(data, dict):
             return {k: self._convert_to_json_serializable(v) for k, v in data.items()}
         elif isinstance(data, list):

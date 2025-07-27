@@ -1,10 +1,10 @@
 # coding:utf-8
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from xtquant import xtdata
-from date_utils import DateUtils
+from utils.date_utils import DateUtils
 
 @dataclass
 class StockInfo:
