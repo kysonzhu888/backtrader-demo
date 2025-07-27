@@ -1,10 +1,9 @@
 import logging
 from datetime import datetime, timedelta
-from threading import Timer
 import pandas as pd
 from wechat_helper import WeChatHelper
 from utils.trading_time_helper import TradingTimeHelper
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 
 
 # 假设数据库接口如下（请根据实际情况替换）

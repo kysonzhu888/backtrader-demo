@@ -6,7 +6,7 @@ import backtrader as bt
 
 from text_utils import TextUtils
 from wechat_helper import WeChatHelper
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 from power_wave_helper import PowerWaveHelper
 
 db_helper = DatabaseHelper()

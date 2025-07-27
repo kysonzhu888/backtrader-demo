@@ -2,8 +2,8 @@ import environment
 import logging
 from datetime import datetime, timedelta
 
-from csv_file_path_manager import CSVFilePathManager
-from database_helper import DatabaseHelper
+from utils.csv_file_path_manager import CSVFilePathManager
+from utils.database_helper import DatabaseHelper
 import pandas as pd
 import os
 import numpy as np

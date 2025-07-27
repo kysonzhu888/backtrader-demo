@@ -1,10 +1,9 @@
 import logging
 import schedule
 import time
-from datetime import datetime, timedelta
 from threading import Thread
 from sqlalchemy import text
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 
 class DatabaseCleaner:
     def __init__(self):

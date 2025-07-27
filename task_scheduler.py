@@ -59,6 +59,16 @@ class TaskScheduler:
     
     def _register_default_tasks(self):
         """注册所有预定义的定时任务"""
+
+
+                # 日线数据加载器 - 每日 7:48
+        self.register_task(TaskConfig(
+            name="features_daily_loader",
+            function=self._import_and_run_task("features_daily_loader", "run_daily_loader"),
+            hour=7, minute=48,
+            description="日线数据加载器 - 加载期货日线数据",
+            frequency=TaskFrequency.DAILY
+        ))
         
         # 期货日报 - 每日 8:01
         self.register_task(TaskConfig(

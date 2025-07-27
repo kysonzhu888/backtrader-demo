@@ -2,7 +2,7 @@ import random
 
 from datetime import timedelta
 
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 from utils.date_utils import DateUtils
 from environment import group_chat_name_vip
 import logging

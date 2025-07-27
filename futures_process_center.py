@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 
 from pinbar_strategy.data_frame_helper import DataFrameHelper
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 from pinbar_strategy import PinbarStrategy
 from power_wave_strategy_backup import PowerWaveStrategy
 from utils import IntervalUtils

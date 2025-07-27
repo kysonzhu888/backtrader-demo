@@ -1,6 +1,5 @@
-import environment
 from tushare_helper import TushareHelper
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 import logging
 
 

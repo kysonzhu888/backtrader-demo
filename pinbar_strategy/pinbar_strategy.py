@@ -11,7 +11,7 @@ from pinbar import Pinbar
 from pinbar_helper import PinbarHelper
 from utils.trading_time_helper import TradingTimeHelper
 
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 
 
 class PinbarStrategy(bt.Strategy):

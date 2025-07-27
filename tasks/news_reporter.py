@@ -1,13 +1,7 @@
-import os
-from threading import Timer
-
 import requests
-from database_helper import DatabaseHelper
-from utils.date_utils import DateUtils
+from utils.database_helper import DatabaseHelper
 from environment import group_chat_name_vip
 import logging
-
-from datetime import timedelta
 
 from wechat_helper import WeChatHelper
 

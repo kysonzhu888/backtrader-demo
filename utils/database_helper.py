@@ -229,7 +229,7 @@ class DatabaseHelper:
     def _auto_checkpoint(self):
         """智能检查点（网页14、网页16）"""
         current_time = time.time()
-        wal_size = os.path.getsize("futures_data.db-wal") if os.path.exists("futures_data.db-wal") else 0
+        wal_size = os.path.getsize("../futures_data.db-wal") if os.path.exists("../futures_data.db-wal") else 0
 
         # 动态调整检查点频率（网页16）
         checkpoint_interval = 60 if wal_size < 0.5 * 1024 * 1024 else 10

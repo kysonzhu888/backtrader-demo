@@ -5,7 +5,7 @@ import tushare as ts
 from typing import List, Dict, Optional
 
 from utils.date_utils import DateUtils
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 from utils.logger_utils import Logger
 
 def initialize_tushare():

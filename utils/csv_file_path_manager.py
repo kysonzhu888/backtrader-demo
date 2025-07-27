@@ -4,7 +4,7 @@ import os
 class CSVFilePathManager:
     """文件路径管理器，统一管理所有文件路径和命名规则"""
 
-    BASE_DATA_DIR = "data"
+    BASE_DATA_DIR = "../data"
     SPLIT_DIR = os.path.join(BASE_DATA_DIR, "split")
 
     @staticmethod

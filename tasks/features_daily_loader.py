@@ -7,7 +7,7 @@ import tushare as ts
 from datetime import datetime, timedelta
 from threading import Timer
 
-from database_helper import DatabaseHelper
+from utils.database_helper import DatabaseHelper
 from utils.date_utils import DateUtils
 
 
@@ -76,21 +76,6 @@ def run_daily_loader():
         loader.get_futures_daily(mapping_ts_codes, end_date=time_str)
 
 
-def schedule_daily_loader_task():
-    # 设置下次运行时间
-    now = DateUtils.now()
-    next_run = now.replace(hour=7, minute=48, second=0, microsecond=0)
-    if now >= next_run:
-        next_run += timedelta(days=1)
-    delay = (next_run - now).total_seconds()
-
-    # 如果是 debug 模式，则立刻执行
-    if os.getenv('DEBUG_MODE') == '1':
-        delay = 3
-
-    logging.info(f"日线数据加载器即将在{delay}秒后执行，请等待...")
-    Timer(delay, run_daily_loader).start()
-
-
 if __name__ == "__main__":
-    schedule_daily_loader_task()
+    # 直接运行任务（用于测试）
+    run_daily_loader()
