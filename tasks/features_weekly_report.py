@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 from utils.pilot_helper import PilotHelper
 import matplotlib
 
-from tushare_helper import TushareHelper
-from wechat_helper import WeChatHelper
+from utils.tushare_helper import TushareHelper
+from utils.wechat_helper import WeChatHelper
 
 matplotlib.use('Agg')
 

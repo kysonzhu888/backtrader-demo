@@ -21,25 +21,10 @@ def start_process(script_name):
 
 PROCESS_CONFIG = {
     # "main.py": "main.py",
-    # "features_min_loader.py": "features_min_loader.py",
-    # "git_helper.py": "git_helper.py",
-    # "news_reporter.py": "news_reporter.py",
-    # "features_data_preloader.py": "features_data_preloader.py",
-    "features_daily_report.py": "features_daily_report.py",
-    # "features_weekly_report.py": "features_weekly_report.py",
-    # "features_daily_loader.py": "features_daily_loader.py",
-    "weather_report.py": "weather_report.py",
-    "live_news.py": "live_news.py",
-    # "regular_cleanup_db.py": "regular_cleanup_db.py",
-    "hk_top10_broadcaster.py": "hk_top10_broadcaster.py",
-
     # "pow_wave_strategy.py": "pow_wave_strategy.py",
-
     # "features_min_monitor.py": "features_min_monitor.py",
     # "if_amount_realtime.py":"if_amount_realtime.py",
-    "holder_trade_strategy.py":"holder_trade_strategy.py",
     # "stock_market_service.py": os.path.join("mini_stock", "stock_market_service.py"),
-    # "ministock_monitor.py": os.path.join("mini_stock", "ministock_monitor.py"),
 }
 
 

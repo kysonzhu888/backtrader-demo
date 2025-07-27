@@ -15,7 +15,7 @@ import environment
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
-from app import get_app, register_blueprint, run_app
+from utils.app import get_app, register_blueprint, run_app
 from mini_stock.stock_blueprint import stock_blueprint, init_market_service
 from features.futures_blueprint import futures_blueprint
 from features.index_futures_market_service import init_index_futures_service

@@ -1,11 +1,8 @@
-import os
-import threading
 import time
-from datetime import timedelta
 import pandas as pd
 from utils.date_utils import DateUtils
-from wechat_helper import WeChatHelper
-from tushare_helper import TushareHelper
+from utils.wechat_helper import WeChatHelper
+from utils.tushare_helper import TushareHelper
 from utils.logger_utils import Logger
 
 # 定义目标微信群列表

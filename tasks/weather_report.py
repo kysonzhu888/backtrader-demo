@@ -1,14 +1,10 @@
-import threading
-import time
 import logging
 import urllib.parse
 import urllib3
-from datetime import datetime, timedelta
+from datetime import datetime
 import json  # 导入json模块
-import os
 
-from utils.date_utils import DateUtils
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

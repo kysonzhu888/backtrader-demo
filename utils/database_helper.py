@@ -51,7 +51,7 @@ class DatabaseHelper:
     _last_checkpoint_time = 0
 
     def __init__(self):
-        database_uri = 'sqlite:///futures_data.db'
+        database_uri = 'sqlite:///data/futures_data.db'
         self.engine = create_engine(database_uri,
                                     poolclass=QueuePool,
                                     pool_size=20,

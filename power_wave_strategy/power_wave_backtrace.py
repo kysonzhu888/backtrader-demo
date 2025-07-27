@@ -1,11 +1,8 @@
 import pandas as pd
 
 import environment
-from micro_defs import Direction
-import matplotlib.pyplot as plt
-import logging
 
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 
 AU_CONTRACT_MULTIPLIER = 1000  # 黄金等合约乘数
 

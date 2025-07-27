@@ -1,17 +1,13 @@
 import os
-import sys
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
 from datetime import datetime
-import pandas as pd
 
 # 使用导入工具设置项目路径
 from utils.import_utils import setup_project_path
 setup_project_path()
 
-from app import UPLOAD_FOLDER, allowed_file
-
-from features.index_futures_market_service import IndexFuturesMarketService, init_index_futures_service
+from utils.app import UPLOAD_FOLDER, allowed_file
 
 # 创建股指期货服务蓝图
 futures_blueprint = Blueprint('futures', __name__, url_prefix='/futures')

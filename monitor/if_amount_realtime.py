@@ -1,10 +1,9 @@
 # coding:utf-8
 import logging
-import time
 import environment
 from datetime import datetime
 from xtquant import xtdata
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 
 # 沪深300指数代码
 code = '510300.SH'

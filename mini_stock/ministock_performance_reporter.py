@@ -3,7 +3,7 @@ import os
 import logging
 from datetime import datetime
 from utils.date_utils import DateUtils
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 import environment
 from stock_data_manager import StockDataManager
 from mini_stock.utils.stock_price_utils import StockPriceUtils
@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 from dataclasses import dataclass
 from xtquant import xtdata
 from mini_stock_report_reader import MiniStockReportReader
-from stock_cache_manager import StockCacheManager
+from mini_stock.stock_cache_manager import StockCacheManager
 import matplotlib
 matplotlib.use('Agg')
 from utils.report_image_generator import ReportImageGenerator

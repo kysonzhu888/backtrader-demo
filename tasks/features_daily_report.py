@@ -12,9 +12,9 @@ from tools.feature_info import FeatureInfo
 import matplotlib.pyplot as plt
 
 from utils.pilot_helper import PilotHelper
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 import matplotlib
-from tushare_helper import TushareHelper  # 新增
+from utils.tushare_helper import TushareHelper  # 新增
 
 matplotlib.use('Agg')
 

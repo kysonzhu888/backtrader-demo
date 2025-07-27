@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 import pandas as pd
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 from utils.trading_time_helper import TradingTimeHelper
 from utils.database_helper import DatabaseHelper
 

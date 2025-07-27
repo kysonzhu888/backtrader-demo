@@ -7,7 +7,7 @@ from utils.date_utils import DateUtils
 from environment import group_chat_name_vip
 import logging
 
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 
 
 class PinbarReporter:

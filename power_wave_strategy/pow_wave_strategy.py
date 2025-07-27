@@ -15,7 +15,7 @@ from micro_defs import BarColor
 import logging
 
 from signal_series_manager import SignalSeriesManager
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 from threading import Timer
 from utils.date_utils import DateUtils
 from utils.trading_time_helper import TradingTimeHelper

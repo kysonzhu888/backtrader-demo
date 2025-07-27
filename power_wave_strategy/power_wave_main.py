@@ -5,7 +5,7 @@ import time
 import logging
 
 from utils.date_utils import DateUtils
-from futures_process_center import FeatureProcessCenter
+from pinbar_strategy.futures_process_center import FeatureProcessCenter
 from tools.feature_info import shfe_product_types, cffex_product_types, dce_product_types, czce_product_types, \
     ine_product_types, gfex_product_types
 from utils.trading_time_helper import TradingTimeHelper

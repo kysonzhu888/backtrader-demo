@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 from utils.import_utils import setup_project_path
 setup_project_path()
 
-from app import UPLOAD_FOLDER, allowed_file
+from utils.app import UPLOAD_FOLDER, allowed_file
 from mini_stock.stock_market_service import StockMarketService
 
 # 创建股票服务蓝图

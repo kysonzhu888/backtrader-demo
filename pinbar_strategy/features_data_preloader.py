@@ -1,6 +1,6 @@
 import time
 from tools.feature_info import FeatureInfo
-from tushare_helper import TushareHelper
+from utils.tushare_helper import TushareHelper
 import logging
 import os
 from datetime import datetime, timedelta

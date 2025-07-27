@@ -1,4 +1,4 @@
-from tushare_helper import TushareHelper
+from utils.tushare_helper import TushareHelper
 from utils.database_helper import DatabaseHelper
 import logging
 

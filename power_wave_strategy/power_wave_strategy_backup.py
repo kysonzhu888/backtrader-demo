@@ -5,7 +5,7 @@ from power_wave_backup import PowerWave
 import backtrader as bt
 
 from text_utils import TextUtils
-from wechat_helper import WeChatHelper
+from utils.wechat_helper import WeChatHelper
 from utils.database_helper import DatabaseHelper
 from power_wave_helper import PowerWaveHelper
 
