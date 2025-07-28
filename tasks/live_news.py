@@ -53,9 +53,17 @@ def broadcast_news_task():
                         seen_titles.add(title)
 
                 if unique_news_titles:
+                    # 限制新闻条数，避免消息过长
+                    max_news_count = 5  # 最多显示5条新闻
+                    limited_titles = unique_news_titles[:max_news_count]
+                    
                     # 将去重后的标题用换行符连接起来，并加上序号
-                    numbered_titles = [f"{i + 1}. {title}" for i, title in enumerate(unique_news_titles)]
+                    numbered_titles = [f"{i + 1}. {title}" for i, title in enumerate(limited_titles)]
                     broadcast_message = f"不定期新闻播报来了: \n" + "\n".join(numbered_titles)
+                    
+                    # 如果新闻被截断，添加提示
+                    if len(unique_news_titles) > max_news_count:
+                        broadcast_message += f"\n\n(共获取到{len(unique_news_titles)}条新闻，显示前{max_news_count}条)"
 
                     # 使用全局WeChatHelper实例播报
                     send_message(broadcast_message, group)
