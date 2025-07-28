@@ -64,7 +64,7 @@ class TaskScheduler:
     
     def _register_default_tasks(self):
         """注册所有预定义的定时任务"""
-
+        
 
                 # 期货数据预加载器 - 每日 7:10
         self.register_task(TaskConfig(
@@ -376,6 +376,10 @@ class TaskScheduler:
             next_run = self.get_next_run_time(task_config)
             delay = (next_run - now).total_seconds()
             
+            # 调试模式处理
+            if self.debug_mode:
+                delay = task_config.debug_delay
+            
             status = {
                 'name': task_name,
                 'description': task_config.description,
@@ -398,6 +402,10 @@ class TaskScheduler:
         next_run = self.get_next_run_time(task_config)
         now = DateUtils.now()
         delay = (next_run - now).total_seconds()
+        
+        # 调试模式处理
+        if self.debug_mode:
+            delay = task_config.debug_delay
         
         return {
             'name': task_name,

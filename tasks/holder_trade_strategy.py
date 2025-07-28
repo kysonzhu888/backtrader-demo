@@ -84,7 +84,7 @@ def run_strategy():
     strategy.broadcast_holder_trade()
     logging.info("持仓交易策略任务执行完毕。")
 
-
+            
 if __name__ == "__main__":
     # 直接运行任务（用于测试）
     run_strategy() 

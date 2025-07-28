@@ -133,17 +133,17 @@ class WeChatHelper:
                         time.sleep(0.5)  # 等待窗口切换
                         
                         # 发送消息
-                        result = self.wx.SendMsg(message, recipient)
+                result = self.wx.SendMsg(message, recipient)
                         
-                        # 检查发送结果
-                        if result:
-                            return True
-                        else:
+                # 检查发送结果
+                if result:
+                    return True
+                else:
                             Logger.warning(f"wxauto发送消息返回False (尝试 {attempt + 1}/{max_retries}): {recipient}")
                             if attempt < max_retries - 1:
                                 time.sleep(1)  # 等待1秒后重试
                                 continue
-                            return False
+                    return False
                             
                     except Exception as retry_error:
                         Logger.warning(f"发送消息重试 {attempt + 1}/{max_retries} 失败: {str(retry_error)}")
@@ -235,22 +235,22 @@ class WeChatHelper:
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        if recipient:
-                            # 如果有指定接收者，先切换到对应聊天窗口
-                            self.wx.ChatWith(recipient)
+                if recipient:
+                    # 如果有指定接收者，先切换到对应聊天窗口
+                    self.wx.ChatWith(recipient)
                             time.sleep(0.5)  # 等待窗口切换
                         
-                        result = self.wx.SendFiles(file_path)
-                        if result:
-                            Logger.info(f"文件发送成功: {file_path}")
-                            return True
-                        else:
+                result = self.wx.SendFiles(file_path)
+                if result:
+                    Logger.info(f"文件发送成功: {file_path}")
+                    return True
+                else:
                             Logger.warning(f"文件发送返回False (尝试 {attempt + 1}/{max_retries}): {file_path}")
                             if attempt < max_retries - 1:
                                 time.sleep(1)  # 等待1秒后重试
                                 continue
-                            Logger.error(f"文件发送失败: {file_path}")
-                            return False
+                    Logger.error(f"文件发送失败: {file_path}")
+                    return False
                             
                     except Exception as retry_error:
                         Logger.warning(f"发送文件重试 {attempt + 1}/{max_retries} 失败: {str(retry_error)}")
