@@ -4,7 +4,7 @@ import urllib3
 from datetime import datetime
 import json  # 导入json模块
 
-from utils.global_wechat import send_message
+from utils.global_wechat_simple import send_message
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
