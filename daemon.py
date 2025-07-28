@@ -16,17 +16,18 @@ def get_python_executable():
 
 def start_process(script_name):
     python_executable = get_python_executable()
-    script_relative_path = os.path.join('monitor', script_name)
-    script_path = os.path.join(os.getcwd(), script_relative_path)
+    script_path = os.path.join(os.getcwd(), python_executable)
     return subprocess.Popen([python_executable, script_path])
 
 
 PROCESS_CONFIG = {
     # "main.py": "main.py",
     # "pow_wave_strategy.py": "pow_wave_strategy.py",
-    # "features_min_monitor.py": "features_min_monitor.py",
-    "if_amount_realtime.py":"if_amount_realtime.py",
+    "task_scheduler.py": "task_scheduler.py",
+    # "if_amount_realtime.py":"if_amount_realtime.py",
     # "stock_market_service.py": os.path.join("mini_stock", "stock_market_service.py"),
+    "features_min_loader.py": os.path.join("pinbar_strategy", "features_min_loader.py"),
+    "if_amount_realtime.py": os.path.join("monitor", "if_amount_realtime.py"),
 }
 
 

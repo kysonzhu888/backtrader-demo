@@ -27,7 +27,7 @@ def preload_main_constracts():
 def run_data_preloader():
     """期货数据预加载任务 - 由统一调度器调用"""
     logging.info("期货数据预加载任务开始执行...")
-preload_main_constracts()
+    preload_main_constracts()
     logging.info("期货数据预加载任务执行完毕。")
 
 
