@@ -3,7 +3,7 @@ from utils.database_helper import DatabaseHelper
 from environment import group_chat_name_vip
 import logging
 
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message
 
 
 def get_news():
@@ -76,8 +76,7 @@ def get_news():
 
 def news_report():
     msg = "早安啊，新的一天又开始了，让我们看看昨天有什么值得关注的吧！\n" + "\n".join(get_news())
-    wechat_helper = WeChatHelper()
-    wechat_helper.send_message(msg, group_chat_name_vip)
+    send_message(msg, group_chat_name_vip)
 
 if __name__ == '__main__':
     # 直接运行任务（用于测试）

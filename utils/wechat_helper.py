@@ -9,7 +9,23 @@ from utils.logger_utils import Logger
 
 
 class WeChatHelper:
+    _instance = None
+    _lock = threading.RLock()
+    
+    def __new__(cls):
+        """单例模式实现"""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super(WeChatHelper, cls).__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(self):
+        """初始化方法（只在第一次创建时执行）"""
+        if self._initialized:
+            return
+            
         import platform
         if platform.system() == 'Windows':
             if os.getenv('DEBUG_MODE') == '1':
@@ -36,7 +52,8 @@ class WeChatHelper:
         self.message_thread = threading.Thread(target=self._process_message_queue, daemon=True)
         self.message_thread.start()
         
-        Logger.info("WeChatHelper 初始化完成")
+        self._initialized = True
+        Logger.info("WeChatHelper 单例初始化完成")
 
     def _get_message_hash(self, message, recipient):
         """生成消息的唯一标识"""
@@ -107,14 +124,36 @@ class WeChatHelper:
         """实际执行消息发送"""
         try:
             if self.wx:
-                # 使用wxauto发送消息
-                result = self.wx.SendMsg(message, recipient)
-                # 检查发送结果
-                if result:
-                    return True
-                else:
-                    Logger.warning(f"wxauto发送消息返回False: {recipient}")
-                    return False
+                # 添加重试机制和错误处理
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        # 先尝试切换到目标聊天窗口
+                        self.wx.ChatWith(recipient)
+                        time.sleep(0.5)  # 等待窗口切换
+                        
+                        # 发送消息
+                        result = self.wx.SendMsg(message, recipient)
+                        
+                        # 检查发送结果
+                        if result:
+                            return True
+                        else:
+                            Logger.warning(f"wxauto发送消息返回False (尝试 {attempt + 1}/{max_retries}): {recipient}")
+                            if attempt < max_retries - 1:
+                                time.sleep(1)  # 等待1秒后重试
+                                continue
+                            return False
+                            
+                    except Exception as retry_error:
+                        Logger.warning(f"发送消息重试 {attempt + 1}/{max_retries} 失败: {str(retry_error)}")
+                        if attempt < max_retries - 1:
+                            time.sleep(2)  # 等待2秒后重试
+                            continue
+                        else:
+                            # 最后一次尝试失败，抛出异常
+                            raise retry_error
+                            
             else:
                 # 模拟发送
                 print(f"[模拟发送] {recipient}: {message}")
@@ -122,7 +161,28 @@ class WeChatHelper:
                 
         except Exception as e:
             Logger.error(f"执行消息发送时出错: {str(e)}")
+            # 如果是COM错误，尝试重新初始化微信客户端
+            if "COM" in str(e) or "-2147467259" in str(e):
+                Logger.warning("检测到COM错误，尝试重新初始化微信客户端...")
+                try:
+                    self._reinitialize_wechat()
+                except Exception as reinit_error:
+                    Logger.error(f"重新初始化微信客户端失败: {str(reinit_error)}")
             return False
+
+    def _reinitialize_wechat(self):
+        """重新初始化微信客户端"""
+        try:
+            import platform
+            if platform.system() == 'Windows':
+                from wxauto import WeChat
+                self.wx = WeChat()
+                Logger.info("微信客户端重新初始化成功")
+            else:
+                self.wx = None
+        except Exception as e:
+            Logger.error(f"重新初始化微信客户端时出错: {str(e)}")
+            self.wx = None
 
     def send_message(self, message, recipient):
         """将消息添加到队列"""
@@ -171,22 +231,48 @@ class WeChatHelper:
             
         try:
             if self.wx:
-                if recipient:
-                    # 如果有指定接收者，先切换到对应聊天窗口
-                    self.wx.ChatWith(recipient)
-                result = self.wx.SendFiles(file_path)
-                if result:
-                    Logger.info(f"文件发送成功: {file_path}")
-                    return True
-                else:
-                    Logger.error(f"文件发送失败: {file_path}")
-                    return False
+                # 添加重试机制
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        if recipient:
+                            # 如果有指定接收者，先切换到对应聊天窗口
+                            self.wx.ChatWith(recipient)
+                            time.sleep(0.5)  # 等待窗口切换
+                        
+                        result = self.wx.SendFiles(file_path)
+                        if result:
+                            Logger.info(f"文件发送成功: {file_path}")
+                            return True
+                        else:
+                            Logger.warning(f"文件发送返回False (尝试 {attempt + 1}/{max_retries}): {file_path}")
+                            if attempt < max_retries - 1:
+                                time.sleep(1)  # 等待1秒后重试
+                                continue
+                            Logger.error(f"文件发送失败: {file_path}")
+                            return False
+                            
+                    except Exception as retry_error:
+                        Logger.warning(f"发送文件重试 {attempt + 1}/{max_retries} 失败: {str(retry_error)}")
+                        if attempt < max_retries - 1:
+                            time.sleep(2)  # 等待2秒后重试
+                            continue
+                        else:
+                            # 最后一次尝试失败，抛出异常
+                            raise retry_error
             else:
                 print(f"[模拟发送文件] {file_path}")
                 return True
                 
         except Exception as e:
             Logger.error(f"发送文件时出错: {str(e)}")
+            # 如果是COM错误，尝试重新初始化微信客户端
+            if "COM" in str(e) or "-2147467259" in str(e):
+                Logger.warning("检测到COM错误，尝试重新初始化微信客户端...")
+                try:
+                    self._reinitialize_wechat()
+                except Exception as reinit_error:
+                    Logger.error(f"重新初始化微信客户端失败: {str(reinit_error)}")
             return False
 
     def get_client(self):
@@ -196,6 +282,54 @@ class WeChatHelper:
     def get_queue_size(self):
         """获取当前队列大小"""
         return self.message_queue.qsize()
+
+    def check_wechat_health(self):
+        """检查微信客户端健康状态"""
+        try:
+            if self.wx:
+                # 尝试获取微信窗口信息来检查连接状态
+                try:
+                    # 简单的健康检查：尝试获取微信窗口
+                    window_info = self.wx.GetWeChatWindow()
+                    if window_info:
+                        Logger.debug("微信客户端连接正常")
+                        return True
+                    else:
+                        Logger.warning("无法获取微信窗口，可能连接异常")
+                        return False
+                except Exception as e:
+                    Logger.warning(f"微信客户端健康检查失败: {str(e)}")
+                    return False
+            else:
+                Logger.debug("微信客户端未初始化（调试模式或非Windows系统）")
+                return True
+        except Exception as e:
+            Logger.error(f"检查微信客户端健康状态时出错: {str(e)}")
+            return False
+
+    def force_reinitialize(self):
+        """强制重新初始化微信客户端"""
+        Logger.info("强制重新初始化微信客户端...")
+        try:
+            self._reinitialize_wechat()
+            return self.check_wechat_health()
+        except Exception as e:
+            Logger.error(f"强制重新初始化失败: {str(e)}")
+            return False
+
+    @classmethod
+    def get_instance(cls):
+        """获取全局单例实例"""
+        return cls()
+
+    @classmethod
+    def reset_instance(cls):
+        """重置单例实例（用于测试或特殊情况）"""
+        with cls._lock:
+            if cls._instance:
+                cls._instance.stop()
+                cls._instance = None
+            Logger.info("WeChatHelper 单例已重置")
 
     def get_send_stats(self):
         """获取发送统计信息"""

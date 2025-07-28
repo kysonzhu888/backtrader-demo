@@ -3,7 +3,7 @@ import logging
 import environment
 from datetime import datetime
 from xtquant import xtdata
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message, send_message_to_multiple_recipients
 
 # 沪深300指数代码
 code = '510300.SH'
@@ -57,8 +57,7 @@ def callback_func(data):
                 if daily_alert_count > 3:
                     msg += "\n疑似国家队托底，请关注！"
                 
-                wechat_helper = WeChatHelper()
-                wechat_helper.send_message_to_multiple_recipients(msg, [environment.group_chat_name_dlb,environment.group_chat_name_vip])
+                send_message_to_multiple_recipients(msg, [environment.group_chat_name_dlb,environment.group_chat_name_vip])
             else:
                 logging.info(f"【沪深300正常播报】\n时间: {time_str}, 成交额: {amount_in_yi:.2f}亿, 收盘价: {close:.3f}")
         else:
@@ -73,9 +72,8 @@ def callback_func(data):
 
 
 try:
-    wechat_helper = WeChatHelper()
     msg = f'[{code}] 异动开始监控...'
-    wechat_helper.send_message(msg, environment.group_chat_name_monitor)
+    send_message(msg, environment.group_chat_name_monitor)
 
     # 订阅实时行情
     xtdata.subscribe_quote(code, period='1m', count=-1, callback=callback_func)

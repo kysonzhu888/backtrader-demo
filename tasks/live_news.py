@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import random
 
 
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message
 
 from utils.tushare_helper import TushareHelper
 
@@ -57,9 +57,8 @@ def broadcast_news_task():
                     numbered_titles = [f"{i + 1}. {title}" for i, title in enumerate(unique_news_titles)]
                     broadcast_message = f"不定期新闻播报来了: \n" + "\n".join(numbered_titles)
 
-                    # 使用 WeChatHelper 播报
-                    wechat_helper = WeChatHelper()
-                    wechat_helper.send_message(broadcast_message, group)
+                    # 使用全局WeChatHelper实例播报
+                    send_message(broadcast_message, group)
                     # 在发送给不同群之间稍作延迟
                     time.sleep(5)
                 else:

@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 import pandas as pd
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message
 from utils.trading_time_helper import TradingTimeHelper
 from utils.database_helper import DatabaseHelper
 
@@ -28,9 +28,8 @@ def check_minute_data():
             if latest_ts is None or (now - latest_ts) > timedelta(minutes=2):
                 missing_products.append(product)
     if missing_products:
-        wx = WeChatHelper()
         msg = f"【分钟数据监控】{','.join(missing_products)} 最近一分钟数据未入库，请检查数据服务！"
-        wx.send_message(msg, "老公老婆")
+        send_message(msg, "老公老婆")
     else:
         logging.debug("ok,no problem")
 

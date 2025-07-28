@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import os
 from utils.tushare_helper import TushareHelper
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message, send_file
 from utils.date_utils import DateUtils
 from typing import Optional
 
@@ -66,10 +66,9 @@ class HolderTradeStrategy:
             file_path = self._save_report(report)
             
             # 发送到微信群
-            wechat_helper = WeChatHelper()
-            wechat_helper.send_message("今日A股减持一览：", environment.group_chat_name_vip)
+            send_message("今日A股减持一览：", environment.group_chat_name_vip)
             time.sleep(2)
-            wechat_helper.send_file(file_path)
+            send_file(file_path, environment.group_chat_name_vip)
 
             
             logging.info("减持信息播报完成")

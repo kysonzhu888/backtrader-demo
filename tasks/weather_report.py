@@ -4,7 +4,7 @@ import urllib3
 from datetime import datetime
 import json  # 导入json模块
 
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -88,8 +88,7 @@ class WeatherReport:
                         logging.info(f"Weather broadcast message: {broadcast_message}")
 
                         # 例如：发送到微信
-                        wx_helper = WeChatHelper()
-                        wx_helper.send_message(broadcast_message, "老公老婆") # 请替换为你的目标群聊名
+                        send_message(broadcast_message, "老公老婆") # 请替换为你的目标群聊名
 
                     else:
                         logging.warning("API response missing city or condition info.")

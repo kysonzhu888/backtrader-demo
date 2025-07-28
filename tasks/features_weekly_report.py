@@ -14,7 +14,7 @@ from utils.pilot_helper import PilotHelper
 import matplotlib
 
 from utils.tushare_helper import TushareHelper
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message, send_file
 
 matplotlib.use('Agg')
 
@@ -132,13 +132,12 @@ def run_weekly_report():
         sorted_report = FeaturesWeeklyReport.generate_sorted_report(result)
         file_path = FeaturesWeeklyReport.plot_sorted_report(sorted_report)
 
-        wechat_helper = WeChatHelper()
-        wechat_helper.send_message("早安，以下是上周的商品期货周报：\n", environment.group_chat_name_vip)
-        wechat_helper.send_file(file_path)
+        send_message("早安，以下是上周的商品期货周报：\n", environment.group_chat_name_vip)
+        send_file(file_path, environment.group_chat_name_vip)
 
         # 生成并发送总结
         summary_msg = FeaturesWeeklyReport.summarize_weekly_pct_change_report(sorted_report)
-        wechat_helper.send_message(summary_msg, environment.group_chat_name_vip)
+        send_message(summary_msg, environment.group_chat_name_vip)
 
     else:
         logging.error("缺少主力合约数据，请先启动 preload_main_constracts")

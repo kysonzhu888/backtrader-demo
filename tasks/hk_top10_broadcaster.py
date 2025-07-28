@@ -1,7 +1,7 @@
 import time
 import pandas as pd
 from utils.date_utils import DateUtils
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message
 from utils.tushare_helper import TushareHelper
 from utils.logger_utils import Logger
 
@@ -33,8 +33,7 @@ def broadcast_hk_top10_task():
             try:
                 sh_message = process_market_data(sh_data, "沪市")
                 if sh_message:
-                    wechat_helper = WeChatHelper()
-                    wechat_helper.send_message(sh_message, target_groups[0])
+                    send_message(sh_message, target_groups[0])
                     time.sleep(5)  # 发送间隔
             except Exception as e:
                 Logger.error(f"处理沪市数据时发生错误: {e}", save_to_file=True)
@@ -44,8 +43,7 @@ def broadcast_hk_top10_task():
             try:
                 sz_message = process_market_data(sz_data, "深市")
                 if sz_message:
-                    wechat_helper = WeChatHelper()
-                    wechat_helper.send_message(sz_message, target_groups[0])
+                    send_message(sz_message, target_groups[0])
                     time.sleep(5)  # 发送间隔
             except Exception as e:
                 Logger.error(f"处理深市数据时发生错误: {e}", save_to_file=True)
@@ -55,8 +53,7 @@ def broadcast_hk_top10_task():
             summary_message = generate_summary_message(sh_data, sz_data)
             if summary_message:
                 for group in target_groups[2:]:
-                    wechat_helper = WeChatHelper()
-                    wechat_helper.send_message(summary_message, group)
+                    send_message(summary_message, group)
                     time.sleep(5)  # 发送间隔
         except Exception as e:
             Logger.error(f"处理汇总数据时发生错误: {e}", save_to_file=True)

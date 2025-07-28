@@ -52,6 +52,11 @@ class TaskScheduler:
         self.timers: Dict[str, Timer] = {}
         self.running = False
         
+        # 检查调试模式
+        self.debug_mode = os.getenv('DEBUG_MODE') == '1'
+        if self.debug_mode:
+            Logger.info("🔧 任务调度器运行在调试模式下 - 所有任务将在3秒后执行")
+        
         # 注册所有预定义任务
         self._register_default_tasks()
         
@@ -61,11 +66,11 @@ class TaskScheduler:
         """注册所有预定义的定时任务"""
 
 
-                # 期货数据预加载器 - 每日 7:30
+                # 期货数据预加载器 - 每日 7:10
         self.register_task(TaskConfig(
             name="features_data_preloader",
             function=self._import_and_run_task("features_data_preloader", "run_data_preloader"),
-            hour=7, minute=30,
+            hour=7, minute=10,
             description="期货数据预加载器 - 预加载主力合约数据",
             frequency=TaskFrequency.DAILY
         ))
@@ -100,8 +105,8 @@ class TaskScheduler:
         # 天气播报 - 每2小时执行一次
         self.register_task(TaskConfig(
             name="weather_report",
-            function=self._import_and_run_task("weather_report", "WeatherReport"),
-            hour=0, minute=26,
+            function=self._import_and_run_task("weather_report", "run_weather_report"),
+            hour=0, minute=57,
             description="天气播报 - 每2小时播报一次天气信息",
             frequency=TaskFrequency.CUSTOM,
             custom_interval_hours=2

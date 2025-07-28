@@ -12,7 +12,7 @@ from tools.feature_info import FeatureInfo
 import matplotlib.pyplot as plt
 
 from utils.pilot_helper import PilotHelper
-from utils.wechat_helper import WeChatHelper
+from utils.global_wechat import send_message, send_file
 import matplotlib
 from utils.tushare_helper import TushareHelper  # 新增
 
@@ -236,28 +236,27 @@ def run_daily_report():
 
         file_path = FeaturesDailyReport.plot_sorted_report(sorted_report)
 
-        wechat_helper = WeChatHelper()
-        wechat_helper.send_message("早安，以下是今天的商品期货日报：\n 1.商品涨跌日报：\n", group_chat_name_vip)
-        wechat_helper.send_file(file_path)
+        send_message("早安，以下是今天的商品期货日报：\n 1.商品涨跌日报：\n", group_chat_name_vip)
+        send_file(file_path, group_chat_name_vip)
 
         # 生成并发送总结
         summary_msg = FeaturesDailyReport.summarize_daily_pct_change_report(sorted_report)
-        wechat_helper.send_message(summary_msg, group_chat_name_vip)
+        send_message(summary_msg, group_chat_name_vip)
 
         time.sleep(3)
-        wechat_helper.send_message("2.商品超买超卖日报：\n（1）5日线超买超卖\n", group_chat_name_vip)
-        wechat_helper.send_file(ma5_report_file_path)
+        send_message("2.商品超买超卖日报：\n（1）5日线超买超卖\n", group_chat_name_vip)
+        send_file(ma5_report_file_path, group_chat_name_vip)
         # 生成并发送5日线总结
         ma5_summary_msg = FeaturesDailyReport.summarize_above_ma_report(sorted_report, ma_col='ma5',
                                                                         above_col='above_ma5', ma_name='5日线')
-        wechat_helper.send_message(ma5_summary_msg, group_chat_name_vip)
+        send_message(ma5_summary_msg, group_chat_name_vip)
 
         time.sleep(3)
-        wechat_helper.send_message("（2）20日线超买超卖", group_chat_name_vip)
-        wechat_helper.send_file(ma20_report_file_path)
+        send_message("（2）20日线超买超卖", group_chat_name_vip)
+        send_file(ma20_report_file_path, group_chat_name_vip)
         # 生成并发送20日线总结
         ma20_summary_msg = FeaturesDailyReport.summarize_above_ma_report(sorted_report, ma_col='ma20', above_col='above_ma20', ma_name='20日线')
-        wechat_helper.send_message(ma20_summary_msg, group_chat_name_vip)
+        send_message(ma20_summary_msg, group_chat_name_vip)
     else:
         logging.error("缺少主力合约数据，请先启动 preload_main_constracts")
 
