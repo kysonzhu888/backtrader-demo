@@ -70,11 +70,11 @@ class TaskScheduler:
             frequency=TaskFrequency.DAILY
         ))
         
-        # 期货日报 - 每日 8:01
+        # 期货日报 - 每日
         self.register_task(TaskConfig(
             name="features_daily_report",
             function=self._import_and_run_task("features_daily_report", "run_daily_report"),
-            hour=8, minute=1,
+            hour=8, minute=38,
             description="期货日报 - 每日商品期货涨跌统计",
             frequency=TaskFrequency.DAILY
         ))
@@ -129,7 +129,7 @@ class TaskScheduler:
         self.register_task(TaskConfig(
             name="live_news",
             function=self._import_and_run_task("live_news", "run_live_news"),
-            hour=0, minute=34,
+            hour=0, minute=36,
             description="实时新闻播报 - 每小时播报最新新闻",
             frequency=TaskFrequency.HOURLY
         ))
