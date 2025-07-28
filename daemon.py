@@ -8,15 +8,15 @@ def get_python_executable():
     """根据操作系统返回合适的 Python 可执行文件路径。"""
     if platform.system() == 'Windows':
         # return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
-        # return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
-        return os.path.join('F:\\', '.venv', 'Scripts', 'python.exe')
+        return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
+        # return os.path.join('F:\\', '.venv', 'Scripts', 'python.exe')
     else:
         return os.path.join(os.getcwd(), '.venv', 'bin', 'python')
 
 
 def start_process(script_name):
     python_executable = get_python_executable()
-    script_path = os.path.join(os.getcwd(), python_executable)
+    script_path = os.path.join(os.getcwd(), script_name)
     return subprocess.Popen([python_executable, script_path])
 
 
