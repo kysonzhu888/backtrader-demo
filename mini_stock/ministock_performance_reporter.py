@@ -3,7 +3,7 @@ import os
 import logging
 from datetime import datetime
 from utils.date_utils import DateUtils
-from utils.wechat_helper import WeChatHelper
+from utils.wechat_helper import send_message
 import environment
 from stock_data_manager import StockDataManager
 from mini_stock.utils.stock_price_utils import StockPriceUtils
@@ -237,8 +237,7 @@ class MiniStockPerformanceReporter:
                 return
                 
             # 发送消息
-            wechat_helper = WeChatHelper()
-            wechat_helper.send_message(message, environment.group_chat_name_vip)
+            send_message(message, environment.group_chat_name_vip)
             logging.info("微盘股绩效播报已发送")
             
             # 生成图片

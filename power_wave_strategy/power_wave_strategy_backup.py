@@ -5,7 +5,7 @@ from power_wave_backup import PowerWave
 import backtrader as bt
 
 from text_utils import TextUtils
-from utils.wechat_helper import WeChatHelper
+from utils.wechat_helper import send_message, send_message_to_multiple_recipients
 from utils.database_helper import DatabaseHelper
 from power_wave_helper import PowerWaveHelper
 
@@ -125,13 +125,12 @@ class PowerWaveStrategy(bt.Strategy):
         if status.boll_ok and getattr(signal, 'boll_triggered', 0) == 0:
             db_helper.update_power_wave_signal_boll(signal.id)
 
-        wx_helper = WeChatHelper()
         if status.is_all_conditions_met():
             msg = self.format_broadcast_msg(
                 sig=signal,
                 extra_msg=f"\n可以下单！开单价: {self.data.close[0]}"
             )
-            wx_helper.send_message(msg, "动力波策略群")
+            send_message(msg, "动力波策略群")
             db_helper.update_power_wave_signal_broadcast(signal.id)
             db_helper.update_power_wave_signal_open_price(signal.id, self.data.close[0])
         else:
@@ -139,7 +138,7 @@ class PowerWaveStrategy(bt.Strategy):
                 sig=signal,
                 extra_msg="\n小助理将持续为您播报..."
             )
-            wx_helper.send_message(msg, "动力波策略群")
+            send_message(msg, "动力波策略群")
 
     def handle_un_closed(self, position, power_status):
         current_candle_time = self.data.datetime.datetime(0)
@@ -153,10 +152,9 @@ class PowerWaveStrategy(bt.Strategy):
                     close_price = self.data.close[0]
                     earn = (close_price - open_price) if position.direction == '多' else (open_price - close_price)
                     # 发送平仓播报
-                    wx_helper = WeChatHelper()
                     msg = self.format_broadcast_msg(None,
                                                     f"\n颜色发生变化，请平仓！平仓价: {close_price:.2f},开仓价{open_price:.2f},本次盈利{earn:.2f}")
-                    wx_helper.send_message(
+                    send_message(
                         msg,
                         "动力波策略群")
                     # 更新数据库中的平仓信息
@@ -171,10 +169,9 @@ class PowerWaveStrategy(bt.Strategy):
                         close_price = self.data.close[0]
                         earn = (close_price - open_price) if position.direction == '多' else (open_price - close_price)
 
-                        wx_helper = WeChatHelper()
                         msg = self.format_broadcast_msg(position,
                                                         f"\n系统可能异常退出，未及时播报颜色变化，请平仓！盈利：{earn:.2f}")
-                        wx_helper.send_message(
+                        send_message(
                             msg,
                             "动力波策略群")
                         # 更新数据库中的平仓信息

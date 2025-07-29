@@ -3,7 +3,7 @@ import os
 import logging
 from datetime import timedelta
 from utils.date_utils import DateUtils
-from utils.wechat_helper import WeChatHelper
+from utils.wechat_helper import send_message
 import environment
 from stock_data_manager import StockDataManager, StockFilter
 from mini_stock.utils.stock_price_utils import StockPriceUtils
@@ -160,8 +160,7 @@ class MiniStockUpdateReporter:
                         
             # 发送消息
             if added_stocks or removed_stocks:
-                wechat_helper = WeChatHelper()
-                wechat_helper.send_message(message, environment.group_chat_name_vip)
+                send_message(message, environment.group_chat_name_vip)
                 logging.info("微盘股更新播报已发送")
             else:
                 logging.info("没有成分股变动，无需播报")

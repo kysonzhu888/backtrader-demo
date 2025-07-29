@@ -22,10 +22,9 @@ def start_process(script_name):
 
 PROCESS_CONFIG = {
     # "main.py": "main.py",
-    # "pow_wave_strategy.py": "pow_wave_strategy.py",
+    "pow_wave_strategy.py": os.path.join("power_wave_strategy", "pow_wave_strategy.py"),
     "task_scheduler.py": "task_scheduler.py",
-    # "if_amount_realtime.py":"if_amount_realtime.py",
-    # "stock_market_service.py": os.path.join("mini_stock", "stock_market_service.py"),
+    # # "stock_market_service.py": os.path.join("mini_stock", "stock_market_service.py"),
     "features_min_loader.py": os.path.join("pinbar_strategy", "features_min_loader.py"),
     "if_amount_realtime.py": os.path.join("monitor", "if_amount_realtime.py"),
 }

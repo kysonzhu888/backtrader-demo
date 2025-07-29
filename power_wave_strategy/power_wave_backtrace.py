@@ -2,7 +2,7 @@ import pandas as pd
 
 import environment
 
-from utils.wechat_helper import WeChatHelper
+from utils.wechat_helper import send_message, send_message_to_multiple_recipients
 
 AU_CONTRACT_MULTIPLIER = 1000  # 黄金等合约乘数
 
@@ -178,6 +178,5 @@ class PowerWaveBacktrace:
             msg += f"盈亏：{t['profit']:.2f}元\n"
 
         # 发送消息
-        wx_helper = WeChatHelper()
-        wx_helper.send_message_to_multiple_recipients(msg, [environment.group_chat_name_dlb,
+        send_message_to_multiple_recipients(msg, [environment.group_chat_name_dlb,
                                                           environment.group_chat_name])

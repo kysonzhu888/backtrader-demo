@@ -14,8 +14,8 @@ import os
 from micro_defs import BarColor
 import logging
 
-from signal_series_manager import SignalSeriesManager
-from utils.wechat_helper import WeChatHelper
+from power_wave_strategy.signal_series_manager import SignalSeriesManager
+from utils.wechat_helper import send_message, send_message_to_multiple_recipients
 from threading import Timer
 from utils.date_utils import DateUtils
 from utils.trading_time_helper import TradingTimeHelper
@@ -170,8 +170,7 @@ class StreamingStrategy:
 
     def _handle_force_close(self, status, new_data, minutes_left):
         signal, profit, msg = self.close_position(status, f"收盘前{minutes_left}分钟", new_data)
-        wx_helper = WeChatHelper()
-        wx_helper.send_message_to_multiple_recipients(msg,
+        send_message_to_multiple_recipients(msg,
                                                       [environment.group_chat_name_dlb, environment.group_chat_name_vip])
 
     def _should_broadcast(self, minutes_left):
@@ -182,8 +181,7 @@ class StreamingStrategy:
 
         if len(self.signal_manager.exits_series) > 0:
             msg = PowerWaveBacktrace.broadcast_daily_performance(self)
-            wx_helper = WeChatHelper()
-            wx_helper.send_message_to_multiple_recipients(msg,
+            send_message_to_multiple_recipients(msg,
                                                       [environment.group_chat_name_dlb, environment.group_chat_name_vip])
 
     def _clear_orders_if_needed(self):
@@ -197,8 +195,7 @@ class StreamingStrategy:
                 if (cur_time - self.last_loss_time).total_seconds() < 30 * 60:
                     sts_msg = f"上一单亏损，半小时内不允许开仓，剩余{(30 * 60 - (cur_time - self.last_loss_time).total_seconds()) / 60:.1f}分钟"
                     loss_msg = self.format_broadcast_msg(cur_status=sts_msg, new_data=self.data_window.iloc[-1])
-                    wx_helper = WeChatHelper()
-                    wx_helper.send_message_to_multiple_recipients(loss_msg, [environment.group_chat_name_dlb,
+                    send_message_to_multiple_recipients(loss_msg, [environment.group_chat_name_dlb,
                                                                              environment.group_chat_name_vip])
                     return False
             return True
@@ -211,8 +208,7 @@ class StreamingStrategy:
             f"上一根颜色：{status.color_state.prev_color}，当前颜色：{status.color_state.current_color}\n当前百分位 {status.percentile:.2f}，MACD:{'满足' if status.macd_ok else '未满足'}，布林:{'满足' if status.boll_ok else '未满足'}，日均线：{'满足' if status.intraday_ok else '未满足'}。",
             new_data)
         msg += "\n满足开仓条件，开仓方向：" + status.direction + "\n开仓价格：" + str(new_data.Close)
-        wx_helper = WeChatHelper()
-        wx_helper.send_message_to_multiple_recipients(msg,
+        send_message_to_multiple_recipients(msg,
                                                       [environment.group_chat_name_dlb, environment.group_chat_name_vip])
         self._do_trade(signal, new_data)
 
@@ -222,8 +218,7 @@ class StreamingStrategy:
                 f"上一根颜色：{status.color_state.prev_color}，当前颜色：{status.color_state.current_color}\n当前百分位 {status.percentile:.2f}，MACD:{'满足' if status.macd_ok else '未满足'}，布林:{'满足' if status.boll_ok else '未满足'}，日均线：{'满足' if status.intraday_ok else '未满足'}。",
                 new_data)
             msg += "颜色发生变化了，可以关注起来了。(注意：不意味着可以开单！)"
-            wx_helper = WeChatHelper()
-            wx_helper.send_message(msg, "动力波策略群")
+            send_message(msg, "动力波策略群")
         else:
             logging.debug(f"[power wave] 时间：{new_data.name} 不满足开仓条件，保持空仓")
 
@@ -246,8 +241,7 @@ class StreamingStrategy:
 
     def _handle_color_change_close(self, status, new_data):
         signal, _, msg = self.close_position(status=status, cur_status_msg=None, new_data=new_data)
-        wx_helper = WeChatHelper()
-        wx_helper.send_message_to_multiple_recipients(msg,
+        send_message_to_multiple_recipients(msg,
                                                       [environment.group_chat_name_dlb, environment.group_chat_name_vip])
 
     def _handle_hold(self, status, new_data):
@@ -382,8 +376,7 @@ class StreamingStrategy:
             gain_or_loss = "盈利" if profit > 0 else "亏损"
 
             msg = self.format_broadcast_msg(f"止损价移到 {new_stop:.2f}，目前{gain_or_loss} {profit} 元", new_data)
-            wx_helper = WeChatHelper()
-            wx_helper.send_message_to_multiple_recipients(msg, [environment.group_chat_name_dlb,
+            send_message_to_multiple_recipients(msg, [environment.group_chat_name_dlb,
                                                                 environment.group_chat_name_vip])
 
         return False, just_moved
@@ -457,5 +450,4 @@ if __name__ == "__main__":
 
         run_prod_tasks(data_gen, strategy)
 
-    wx_helper = WeChatHelper()
-    wx_helper.send_message_to_multiple_recipients(msg, [environment.group_chat_name_monitor])
+    send_message_to_multiple_recipients(msg, [environment.group_chat_name_monitor])

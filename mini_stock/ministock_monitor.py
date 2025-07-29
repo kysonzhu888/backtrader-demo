@@ -4,7 +4,7 @@ import requests
 from datetime import datetime
 from utils.date_utils import DateUtils
 import environment
-from utils.wechat_helper import WeChatHelper
+from utils.wechat_helper import send_message
 
 
 class MiniStockMonitor:
@@ -73,8 +73,7 @@ class MiniStockMonitor:
             
         self.broadcast_cache[message_key] = datetime.now()
         try:
-            wechat = WeChatHelper()
-            wechat.send_message(message, self.group_name)
+            send_message(message, self.group_name)
             logging.info(f"已发送微信播报: {message}")
         except Exception as e:
             logging.error(f"微信播报失败: {e}")
@@ -137,8 +136,7 @@ class MiniStockMonitor:
 
     def run(self):
         # 发送启动消息
-        wechat_helper = WeChatHelper()
-        wechat_helper.send_message("小市值股票监控启动...", environment.group_chat_name_monitor)
+        send_message("小市值股票监控启动...", environment.group_chat_name_monitor)
         
         # 开始监控
         self.monitor()

@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 import logging
 from utils.date_utils import DateUtils
-from utils.wechat_helper import WeChatHelper
+from utils.wechat_helper import send_message
 import environment
 from xtquant import xtdata
 # from xtquant.xttype import StockItem
@@ -121,8 +121,7 @@ class MiniStockStrategy:
                         break
                 
                 # 发送总结到微信群
-                wechat_helper = WeChatHelper()
-                wechat_helper.send_message(summary, environment.group_chat_name_vip)
+                        send_message(summary, environment.group_chat_name_vip)
                 
                 logging.info("总结报告已发送到微信群")
             else:
@@ -189,8 +188,7 @@ class MiniStockStrategy:
                 # 发送调仓报告
                 try:
                     logging.info("正在发送调仓报告...")
-                    wechat_helper = WeChatHelper()
-                    wechat_helper.send_message(report, environment.group_chat_name_vip)
+                    send_message(report, environment.group_chat_name_vip)
                 except Exception as e:
                     logging.error(f"发送调仓报告时出错: {str(e)}")
                     # 继续执行，不中断流程

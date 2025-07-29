@@ -7,7 +7,7 @@ from utils.date_utils import DateUtils
 from environment import group_chat_name_vip
 import logging
 
-from utils.wechat_helper import WeChatHelper
+from utils.wechat_helper import send_message, send_message_to_multiple_recipients
 
 
 class PinbarReporter:
@@ -54,8 +54,7 @@ class PinbarReporter:
 
             # 播报高分 pinbar
             for msg in unique_high_score_msgs:
-                wx_helper = WeChatHelper()
-                wx_helper.send_message(msg, group_chat_name_vip)
+                send_message(msg, group_chat_name_vip)
                 # 记录已播报的商品
                 product_name = msg.split(' ')[0]
                 reported_products.add(product_name)
@@ -75,8 +74,7 @@ class PinbarReporter:
                     else:
                         combined_msg = "其他开单信号还有：\n" + "；\n".join(filtered_low_score_msgs)
 
-                    wx_helper = WeChatHelper()
-                    wx_helper.send_message(combined_msg, group_chat_name_vip)
+                    send_message(combined_msg, group_chat_name_vip)
         else:
             for product_type, pinbars in pinbar_dict.items():
                 if len(pinbars) > 1:
@@ -87,8 +85,7 @@ class PinbarReporter:
                     product_type = max_score_pinbar.product_type
                     msg = f"{product_name}({product_type}) 在多个周期下形成了信号共振，其中，{max_score_pinbar.interval} 下成功率 {score * 15}%"
                     if score > 4:
-                        wx_helper = WeChatHelper()
-                        wx_helper.send_message(msg, group_chat_name_vip)
+                        send_message(msg, group_chat_name_vip)
                 else:
                     pinbar = pinbars[0]
                     score = pinbar.score
@@ -104,8 +101,7 @@ class PinbarReporter:
 
                     # 发送消息
                     if score > 4:
-                        wx_helper = WeChatHelper()
-                        wx_helper.send_message(msg, group_chat_name_vip)
+                        send_message(msg, group_chat_name_vip)
                     else:
                         logging.info(f"Score less than 4 for {product_name}, message not sent.")
         # 简单粗暴：遍历2分钟内的所有pinbar，全部置为已播报
