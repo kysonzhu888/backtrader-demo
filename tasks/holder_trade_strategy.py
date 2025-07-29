@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import os
 from utils.tushare_helper import TushareHelper
-from utils.global_wechat_minimal import send_message, send_file
+from utils.wechat_helper_simple_fix import send_message, send_file
 from utils.date_utils import DateUtils
 from typing import Optional
 

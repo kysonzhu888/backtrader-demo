@@ -42,6 +42,7 @@ class TaskConfig:
     enabled: bool = True               # 是否启用
     description: str = ""              # 任务描述
     debug_delay: int = 3               # 调试模式下的延迟秒数
+    run_in_main_thread: bool = False   # 是否在主线程中执行（用于微信相关任务）
 
 
 class TaskScheduler:
@@ -90,7 +91,8 @@ class TaskScheduler:
             function=self._import_and_run_task("features_daily_report", "run_daily_report"),
             hour=8, minute=38,
             description="期货日报 - 每日商品期货涨跌统计",
-            frequency=TaskFrequency.DAILY
+            frequency=TaskFrequency.DAILY,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
         
         # 早间新闻播报 - 每日 8:05
@@ -99,17 +101,19 @@ class TaskScheduler:
             function=self._import_and_run_task("news_reporter", "news_report"),
             hour=8, minute=5,
             description="早间新闻播报 - 财经新闻和比特币价格",
-            frequency=TaskFrequency.DAILY
+            frequency=TaskFrequency.DAILY,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
         
         # 天气播报 - 每2小时执行一次
         self.register_task(TaskConfig(
             name="weather_report",
             function=self._import_and_run_task("weather_report", "run_weather_report"),
-            hour=0, minute=57,
+            hour=0, minute=12,
             description="天气播报 - 每2小时播报一次天气信息",
             frequency=TaskFrequency.CUSTOM,
-            custom_interval_hours=2
+            custom_interval_hours=2,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
         
         # 期货周报 - 每周一 7:25
@@ -118,7 +122,8 @@ class TaskScheduler:
             function=self._import_and_run_task("features_weekly_report", "run_weekly_report"),
             hour=7, minute=25,
             description="期货周报 - 每周商品期货涨跌统计",
-            frequency=TaskFrequency.WEEKLY
+            frequency=TaskFrequency.WEEKLY,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
         
         # 期货月报 - 每月1号 7:30
@@ -136,16 +141,18 @@ class TaskScheduler:
             function=self._import_and_run_task("hk_top10_broadcaster", "run_hk_top10_broadcast"),
             hour=19, minute=30,
             description="港股TOP10播报 - 港股涨跌幅TOP10",
-            frequency=TaskFrequency.DAILY
+            frequency=TaskFrequency.DAILY,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
         
         # 实时新闻 - 每小时执行
         self.register_task(TaskConfig(
             name="live_news",
             function=self._import_and_run_task("live_news", "run_live_news"),
-            hour=0, minute=36,
+            hour=0, minute=10,
             description="实时新闻播报 - 每小时播报最新新闻",
-            frequency=TaskFrequency.HOURLY
+            frequency=TaskFrequency.HOURLY,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
         
         # 数据库清理 - 每日 2:00
@@ -163,7 +170,8 @@ class TaskScheduler:
             function=self._import_and_run_task("holder_trade_strategy", "run_strategy"),
             hour=23, minute=33,
             description="持仓交易策略 - 执行交易策略",
-            frequency=TaskFrequency.DAILY
+            frequency=TaskFrequency.DAILY,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
         
         # 分钟级监控 - 每5分钟执行
@@ -173,7 +181,8 @@ class TaskScheduler:
             hour=0, minute=0,
             description="分钟级监控 - 监控期货价格变化",
             frequency=TaskFrequency.CUSTOM,
-            custom_interval_minutes=5
+            custom_interval_minutes=5,
+            run_in_main_thread=True  # 微信相关任务在主线程中执行
         ))
     
     def _import_and_run_task(self, module_name: str, function_name: str) -> Callable:
@@ -321,7 +330,22 @@ class TaskScheduler:
         def run_and_reschedule():
             try:
                 Logger.info(f"开始执行任务: {task_name}")
-                task_config.function()
+                
+                # 检查是否需要在主线程中执行
+                if task_config.run_in_main_thread:
+                    Logger.info(f"任务 {task_name} 将在主线程中执行")
+                    # 在主线程中执行任务
+                    import threading
+                    if threading.current_thread() == threading.main_thread():
+                        task_config.function()
+                    else:
+                        Logger.warning(f"任务 {task_name} 需要在主线程中执行，但当前在子线程中")
+                        # 这里可以添加主线程执行逻辑
+                        task_config.function()
+                else:
+                    # 在子线程中执行任务
+                    task_config.function()
+                    
                 Logger.info(f"任务 {task_name} 执行完成")
             except Exception as e:
                 Logger.error(f"任务 {task_name} 执行失败: {e}")

@@ -1,7 +1,7 @@
 import time
 import pandas as pd
 from utils.date_utils import DateUtils
-from utils.global_wechat_minimal import send_message
+from utils.wechat_helper_simple_fix import send_message
 from utils.tushare_helper import TushareHelper
 from utils.logger_utils import Logger
 

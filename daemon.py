@@ -8,8 +8,8 @@ def get_python_executable():
     """根据操作系统返回合适的 Python 可执行文件路径。"""
     if platform.system() == 'Windows':
         # return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
-        # return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
-        return os.path.join('F:\\', '.venv', 'Scripts', 'python.exe')
+        return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
+        # return os.path.join('F:\\', '.venv', 'Scripts', 'python.exe')
     else:
         return os.path.join(os.getcwd(), '.venv', 'bin', 'python')
 
