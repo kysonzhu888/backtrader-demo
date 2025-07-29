@@ -3,7 +3,7 @@ import logging
 import environment
 from datetime import datetime
 from xtquant import xtdata
-from utils.wechat_helper_simple_fix import send_message, send_message_to_multiple_recipients
+from utils.wechat_helper import send_message, send_message_to_multiple_recipients
 
 # 沪深300指数代码
 code = '510300.SH'

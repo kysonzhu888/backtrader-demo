@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import random
 
 
-from utils.wechat_helper_simple_fix import send_message
+from utils.wechat_helper import send_message
 
 from utils.tushare_helper import TushareHelper
 

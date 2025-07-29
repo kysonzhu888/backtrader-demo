@@ -81,17 +81,20 @@ def send_message(self, message, recipient):
 ## 🚀 **使用方法**
 
 ### **基本使用**
+
 ```python
-from utils.wechat_helper_simple_fix import send_message
+from utils.wechat_helper import send_message
 
 # 发送消息（不会超时）
 send_message("测试消息", "群聊名称")
 ```
 
 ### **在任务中使用**
+
 ```python
 # 所有任务现在都使用这个版本
-from utils.wechat_helper_simple_fix import send_message
+from utils.wechat_helper import send_message
+
 
 def broadcast_task():
     # ... 获取数据 ...
