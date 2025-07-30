@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-简单直接的微信工具
-确保在主线程中执行，无需复杂队列
+优化版微信工具
+确保wxauto的所有操作都在主线程中执行
 """
 
 import time
@@ -69,7 +69,7 @@ class WeChatHelper:
         
         # 检查是否在主线程中
         if self._current_thread != self._main_thread:
-            Logger.warning(f"在子线程 {self._current_thread.name} 中发送消息，可能导致问题")
+            Logger.warning(f"在子线程 {self._current_thread.name} 中发送消息，可能导致wxauto操作失败")
             Logger.warning("建议在任务调度器中设置微信任务在主线程中执行")
         
         try:
@@ -94,6 +94,10 @@ class WeChatHelper:
                     
         except Exception as e:
             Logger.error(f"发送消息时出错: {str(e)}")
+            # 如果是COM错误，给出更明确的提示
+            if "COM" in str(e) or "-2147467259" in str(e):
+                Logger.error("检测到COM错误，这通常是因为在子线程中调用wxauto导致的")
+                Logger.error("建议在任务调度器中设置微信任务在主线程中执行")
             return False
 
     def send_file(self, file_path, recipient=None):
@@ -104,7 +108,7 @@ class WeChatHelper:
         
         # 检查是否在主线程中
         if self._current_thread != self._main_thread:
-            Logger.warning(f"在子线程 {self._current_thread.name} 中发送文件，可能导致问题")
+            Logger.warning(f"在子线程 {self._current_thread.name} 中发送文件，可能导致wxauto操作失败")
             Logger.warning("建议在任务调度器中设置微信任务在主线程中执行")
             
         try:
@@ -128,6 +132,10 @@ class WeChatHelper:
                     
         except Exception as e:
             Logger.error(f"发送文件时出错: {str(e)}")
+            # 如果是COM错误，给出更明确的提示
+            if "COM" in str(e) or "-2147467259" in str(e):
+                Logger.error("检测到COM错误，这通常是因为在子线程中调用wxauto导致的")
+                Logger.error("建议在任务调度器中设置微信任务在主线程中执行")
             return False
 
     def get_client(self):
@@ -154,7 +162,7 @@ def get_wechat_instance():
     
     with _wechat_lock:
         if _wechat_instance is None:
-            Logger.info("创建简单修复版微信实例...")
+            Logger.info("创建优化版微信实例...")
             _wechat_instance = WeChatHelper()
         return _wechat_instance
 
@@ -209,13 +217,13 @@ def force_reinitialize():
 def get_send_stats():
     """获取发送统计信息（兼容性方法，无统计）"""
     return {
-        'note': '简单修复版微信工具无统计功能'
+        'note': '优化版微信工具无统计功能'
     }
 
 
 def clear_sent_messages():
     """清理已发送消息记录（兼容性方法，无记录）"""
-    Logger.info("简单修复版微信工具无消息记录需要清理")
+    Logger.info("优化版微信工具无消息记录需要清理")
 
 
 def reset_wechat_instance():
@@ -223,4 +231,4 @@ def reset_wechat_instance():
     global _wechat_instance
     with _wechat_lock:
         _wechat_instance = None
-        Logger.info("简单修复版微信实例已重置") 
+        Logger.info("优化版微信实例已重置") 

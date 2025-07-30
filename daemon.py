@@ -16,6 +16,7 @@ def get_python_executable():
 
 def start_process(script_name):
     python_executable = get_python_executable()
+
     script_path = os.path.join(os.getcwd(), script_name)
     return subprocess.Popen([python_executable, script_path])
 
