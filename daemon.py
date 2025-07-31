@@ -8,8 +8,8 @@ def get_python_executable():
     """根据操作系统返回合适的 Python 可执行文件路径。"""
     if platform.system() == 'Windows':
         # return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
-        return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
-        # return os.path.join('F:\\', '.venv', 'Scripts', 'python.exe')
+        # return os.path.join(os.getcwd(), '.venv', 'Scripts', 'python.exe')
+        return os.path.join('F:\\', '.venv', 'Scripts', 'python.exe')
     else:
         return os.path.join(os.getcwd(), '.venv', 'bin', 'python')
 
@@ -28,6 +28,10 @@ PROCESS_CONFIG = {
     # # "stock_market_service.py": os.path.join("mini_stock", "stock_market_service.py"),
     "features_min_loader.py": os.path.join("pinbar_strategy", "features_min_loader.py"),
     "if_amount_realtime.py": os.path.join("monitor", "if_amount_realtime.py"),
+    "live_news.py": os.path.join("tasks", "live_news.py"),
+    "hk_top10_broadcaster.py": os.path.join("tasks", "hk_top10_broadcaster.py"),
+    "weather_report.py": os.path.join("tasks", "weather_report.py"),
+    "holder_trade_strategy.py": os.path.join("tasks", "holder_trade_strategy.py"),
 }
 
 

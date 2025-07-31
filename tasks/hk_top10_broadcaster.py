@@ -1,4 +1,6 @@
 import time
+from threading import Timer
+
 import pandas as pd
 from utils.date_utils import DateUtils
 from utils.wechat_helper import send_message
@@ -210,10 +212,19 @@ def generate_summary_message(sh_data, sz_data):
 
 # 统一调度器调用的函数
 def run_hk_top10_broadcast():
-    """港股TOP10播报任务 - 由统一调度器调用"""
-    Logger.info("港股通十大成交股播报任务开始执行...", save_to_file=True)
-    broadcast_hk_top10_task()
-    Logger.info("港股通十大成交股播报任务执行完毕。", save_to_file=True)
+
+    # 获取当前时间
+    now = DateUtils.now()
+    current_hour = now.hour
+    if current_hour  in [19]:
+        Logger.info("港股通十大成交股播报任务开始执行...", save_to_file=True)
+        run_hk_top10_broadcast()
+        Logger.info("港股通十大成交股播报任务执行完毕。", save_to_file=True)
+    else:
+        Logger.info("实时新闻播报任务执行完毕。")
+
+    Timer(60 * 60, run_hk_top10_broadcast).start()
+
 
 
 if __name__ == "__main__":

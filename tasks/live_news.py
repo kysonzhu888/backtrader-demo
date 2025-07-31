@@ -2,8 +2,9 @@ import time
 import logging
 from datetime import datetime, timedelta
 import random
+from threading import Timer
 
-
+from utils.date_utils import DateUtils
 from utils.wechat_helper import send_message
 
 from utils.tushare_helper import TushareHelper
@@ -35,6 +36,7 @@ def broadcast_news_task():
         for src, group in zip(selected_sources, target_groups):
             logger.info(f"正在从 {src} 获取新闻并发送到 {group}...")
             news_df = TushareHelper.live_news(start_date=start_time, end_date=end_time, src=src)
+            time.sleep(10)
 
             if news_df is not None and not news_df.empty:
                 news_titles = []
@@ -68,7 +70,6 @@ def broadcast_news_task():
                     # 使用全局WeChatHelper实例播报
                     send_message(broadcast_message, group)
                     # 在发送给不同群之间稍作延迟
-                    time.sleep(5)
                 else:
                     logger.info(f"从 {src} 未获取到新闻标题。")
             else:
@@ -80,11 +81,15 @@ def broadcast_news_task():
 # 统一调度器调用的函数
 def run_live_news():
     """实时新闻播报任务 - 由统一调度器调用"""
+
     logger.info("实时新闻播报任务开始执行...")
     broadcast_news_task()
     logger.info("实时新闻播报任务执行完毕。")
+
+    Timer(60 * 20, run_live_news).start()
 
 
 if __name__ == "__main__":
     # 直接运行任务（用于测试）
     run_live_news()
+

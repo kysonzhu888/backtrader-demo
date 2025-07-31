@@ -106,15 +106,15 @@ class TaskScheduler:
         ))
         
         # 天气播报 - 每2小时执行一次
-        self.register_task(TaskConfig(
-            name="weather_report",
-            function=self._import_and_run_task("weather_report", "run_weather_report"),
-            hour=0, minute=12,
-            description="天气播报 - 每2小时播报一次天气信息",
-            frequency=TaskFrequency.CUSTOM,
-            custom_interval_hours=2,
-            run_in_main_thread=True  # 微信相关任务在主线程中执行
-        ))
+        # self.register_task(TaskConfig(
+        #     name="weather_report",
+        #     function=self._import_and_run_task("weather_report", "run_weather_report"),
+        #     hour=0, minute=12,
+        #     description="天气播报 - 每2小时播报一次天气信息",
+        #     frequency=TaskFrequency.CUSTOM,
+        #     custom_interval_hours=2,
+        #     run_in_main_thread=True  # 微信相关任务在主线程中执行
+        # ))
         
         # 期货周报 - 每周一 7:25
         self.register_task(TaskConfig(
@@ -136,24 +136,24 @@ class TaskScheduler:
         ))
         
         # 港股TOP10播报 - 每日 19:30
-        self.register_task(TaskConfig(
-            name="hk_top10_broadcaster",
-            function=self._import_and_run_task("hk_top10_broadcaster", "run_hk_top10_broadcast"),
-            hour=19, minute=30,
-            description="港股TOP10播报 - 港股涨跌幅TOP10",
-            frequency=TaskFrequency.DAILY,
-            run_in_main_thread=True  # 微信相关任务在主线程中执行
-        ))
+        # self.register_task(TaskConfig(
+        #     name="hk_top10_broadcaster",
+        #     function=self._import_and_run_task("hk_top10_broadcaster", "run_hk_top10_broadcast"),
+        #     hour=19, minute=30,
+        #     description="港股TOP10播报 - 港股涨跌幅TOP10",
+        #     frequency=TaskFrequency.DAILY,
+        #     run_in_main_thread=True  # 微信相关任务在主线程中执行
+        # ))
         
-        # 实时新闻 - 每小时执行
-        self.register_task(TaskConfig(
-            name="live_news",
-            function=self._import_and_run_task("live_news", "run_live_news"),
-            hour=0, minute=10,
-            description="实时新闻播报 - 每小时播报最新新闻",
-            frequency=TaskFrequency.HOURLY,
-            run_in_main_thread=True  # 微信相关任务在主线程中执行
-        ))
+        # # 实时新闻 - 每小时执行
+        # self.register_task(TaskConfig(
+        #     name="live_news",
+        #     function=self._import_and_run_task("live_news", "run_live_news"),
+        #     hour=0, minute=23,
+        #     description="实时新闻播报 - 每小时播报最新新闻",
+        #     frequency=TaskFrequency.HOURLY,
+        #     run_in_main_thread=True  # 微信相关任务在主线程中执行
+        # ))
         
         # 数据库清理 - 每日 2:00
         self.register_task(TaskConfig(
@@ -165,14 +165,14 @@ class TaskScheduler:
         ))
         
         # 持仓交易策略 - 每日 14:30
-        self.register_task(TaskConfig(
-            name="holder_trade_strategy",
-            function=self._import_and_run_task("holder_trade_strategy", "run_strategy"),
-            hour=23, minute=33,
-            description="持仓交易策略 - 执行交易策略",
-            frequency=TaskFrequency.DAILY,
-            run_in_main_thread=True  # 微信相关任务在主线程中执行
-        ))
+        # self.register_task(TaskConfig(
+        #     name="holder_trade_strategy",
+        #     function=self._import_and_run_task("holder_trade_strategy", "run_strategy"),
+        #     hour=23, minute=33,
+        #     description="持仓交易策略 - 执行交易策略",
+        #     frequency=TaskFrequency.DAILY,
+        #     run_in_main_thread=True  # 微信相关任务在主线程中执行
+        # ))
         
         # 分钟级监控 - 每5分钟执行
         self.register_task(TaskConfig(

@@ -1,5 +1,7 @@
 # coding:utf-8
 import logging
+from threading import Timer
+
 import environment
 from datetime import datetime
 import time
@@ -78,11 +80,21 @@ class HolderTradeStrategy:
             
 # 统一调度器调用的函数
 def run_strategy():
-    """持仓交易策略任务 - 由统一调度器调用"""
-    logging.info("持仓交易策略任务开始执行...")
-    strategy = HolderTradeStrategy()
-    strategy.broadcast_holder_trade()
-    logging.info("持仓交易策略任务执行完毕。")
+
+    # 获取当前时间
+    now = DateUtils.now()
+    current_hour = now.hour
+    task_hour = 23
+    if current_hour in [task_hour]:
+        logging.info("持仓交易策略任务开始执行...")
+        strategy = HolderTradeStrategy()
+        strategy.broadcast_holder_trade()
+        logging.info("持仓交易策略任务执行完毕。")
+    else:
+        logging.info(f"持仓交易策略任务在 {task_hour} 点 开始执行...")
+
+    Timer(60 * 60, run_strategy).start()
+
 
             
 if __name__ == "__main__":

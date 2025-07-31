@@ -1,5 +1,7 @@
 import logging
 import urllib.parse
+from threading import Timer
+
 import urllib3
 from datetime import datetime
 import json  # 导入json模块
@@ -119,6 +121,8 @@ def run_weather_report():
     report_task = WeatherReport(your_appcode, your_city_id, your_token)
     report_task.broadcast_news()
     logging.info("定时天气播报任务执行完毕。")
+
+    Timer(60 * 60 * 2.5, run_weather_report).start()
 
 
 if __name__ == "__main__":
