@@ -1,5 +1,6 @@
 import time
 from threading import Timer
+from time import sleep
 
 import pandas as pd
 from utils.date_utils import DateUtils
@@ -218,7 +219,8 @@ def run_hk_top10_broadcast():
     current_hour = now.hour
     if current_hour  in [19]:
         Logger.info("港股通十大成交股播报任务开始执行...", save_to_file=True)
-        run_hk_top10_broadcast()
+        sleep(60)
+        broadcast_hk_top10_task()
         Logger.info("港股通十大成交股播报任务执行完毕。", save_to_file=True)
     else:
         Logger.info("实时新闻播报任务执行完毕。")

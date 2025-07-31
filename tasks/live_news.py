@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import random
 from threading import Timer
 
+from tenacity import sleep
+
 from utils.date_utils import DateUtils
 from utils.wechat_helper import send_message
 
@@ -83,6 +85,7 @@ def run_live_news():
     """实时新闻播报任务 - 由统一调度器调用"""
 
     logger.info("实时新闻播报任务开始执行...")
+    sleep(30)
     broadcast_news_task()
     logger.info("实时新闻播报任务执行完毕。")
 

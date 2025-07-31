@@ -1,6 +1,7 @@
 # coding:utf-8
 import logging
 from threading import Timer
+from time import sleep
 
 import environment
 from datetime import datetime
@@ -87,6 +88,7 @@ def run_strategy():
     task_hour = 23
     if current_hour in [task_hour]:
         logging.info("持仓交易策略任务开始执行...")
+        sleep(15)
         strategy = HolderTradeStrategy()
         strategy.broadcast_holder_trade()
         logging.info("持仓交易策略任务执行完毕。")
