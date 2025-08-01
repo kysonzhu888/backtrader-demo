@@ -21,6 +21,9 @@ available_sources = ['sina', 'wallstreetcn', '10jqka', 'eastmoney', 'yuncaijing'
 # 定义目标微信群列表
 target_groups = ["算法学习二群","算法学习三群", "kyson的亿万俱乐部二群", "kyson的亿万俱乐部三群","投资策略VIP群"]
 
+
+Minutes = 20
+
 def broadcast_news_task():
     """
     实际执行新闻获取和播报的任务。
@@ -28,7 +31,7 @@ def broadcast_news_task():
     logger.info("正在获取新闻...")
     try:
         end_time = datetime.now()
-        start_time = end_time - timedelta(hours=1)
+        start_time = end_time - timedelta(minutes=Minutes)
 
         # 随机选择 5 个新闻源
         selected_sources = random.sample(available_sources, 5)
@@ -89,7 +92,7 @@ def run_live_news():
     broadcast_news_task()
     logger.info("实时新闻播报任务执行完毕。")
 
-    Timer(60 * 20, run_live_news).start()
+    Timer(60 * Minutes, run_live_news).start()
 
 
 if __name__ == "__main__":
