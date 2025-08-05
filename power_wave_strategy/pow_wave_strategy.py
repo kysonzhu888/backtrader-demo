@@ -218,7 +218,8 @@ class StreamingStrategy:
                 f"上一根颜色：{status.color_state.prev_color}，当前颜色：{status.color_state.current_color}\n当前百分位 {status.percentile:.2f}，MACD:{'满足' if status.macd_ok else '未满足'}，布林:{'满足' if status.boll_ok else '未满足'}，日均线：{'满足' if status.intraday_ok else '未满足'}。",
                 new_data)
             msg += "颜色发生变化了，可以关注起来了。(注意：不意味着可以开单！)"
-            send_message(msg, "动力波策略群")
+            logging.debug(msg)
+            # send_message(msg, "动力波策略群")
         else:
             logging.debug(f"[power wave] 时间：{new_data.name} 不满足开仓条件，保持空仓")
 
