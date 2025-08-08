@@ -96,54 +96,74 @@ class WeChatProcessLock:
                 self.lock_file = None
     
     def _acquire_lock_windows(self, timeout):
-        """Windows 系统的锁获取"""
-        try:
-            # Windows 使用文件独占打开方式
-            wait_start = time.time()
-            
-            while time.time() - wait_start < timeout:
+        """Windows 系统的锁获取 - 使用独占文件创建方式"""
+        wait_start = time.time()
+        
+        while time.time() - wait_start < timeout:
+            try:
+                # 尝试以独占方式创建锁文件
+                # 使用 'x' 模式确保文件不存在时才创建，存在则抛出异常
+                self.lock_file = open(self.lock_file_path, 'x')
+                return True, time.time() - wait_start
+                
+            except FileExistsError:
+                # 锁文件已存在，说明被其他进程占用
+                # 检查是否是僵尸锁文件（进程已结束但文件还在）
                 try:
-                    # 尝试独占方式打开文件
-                    self.lock_file = open(self.lock_file_path, 'w')
-                    # Windows 下，如果文件已被其他进程打开，上面的操作会成功
-                    # 所以我们使用 msvcrt.locking 进行文件锁定
-                    
-                    # 获取文件句柄
-                    import msvcrt
-                    file_handle = self.lock_file.fileno()
-                    
-                    # 尝试锁定文件的前1024字节
-                    msvcrt.locking(file_handle, msvcrt.LK_NBLCK, 1024)
-                    
-                    return True, time.time() - wait_start
-                    
-                except (PermissionError, OSError) as e:
-                    # 文件被锁定，关闭文件句柄，等待后重试
-                    if self.lock_file:
+                    # 尝试读取锁文件内容，如果能读取说明文件可能是僵尸锁
+                    with open(self.lock_file_path, 'r') as f:
+                        content = f.read().strip()
+                        if content:
+                            # 检查锁文件是否超过5分钟（可能是僵尸锁）
+                            import os
+                            lock_age = time.time() - os.path.getmtime(self.lock_file_path)
+                            if lock_age > 300:  # 5分钟
+                                Logger.warning(f"发现可能的僵尸锁文件，年龄: {lock_age:.1f}秒，尝试清理...")
+                                try:
+                                    os.remove(self.lock_file_path)
+                                    continue  # 重新尝试获取锁
+                                except Exception as e:
+                                    Logger.error(f"清理僵尸锁文件失败: {e}")
+                except Exception:
+                    pass  # 忽略读取错误
+                
+                time.sleep(0.1)
+                continue
+                
+            except Exception as e:
+                Logger.error(f"Windows锁获取异常: {e}")
+                if self.lock_file:
+                    try:
                         self.lock_file.close()
-                        self.lock_file = None
-                    time.sleep(0.1)
-                    continue
-            
-            return False, time.time() - wait_start
-            
-        except Exception as e:
-            if self.lock_file:
-                self.lock_file.close()
-                self.lock_file = None
-            raise e
+                    except:
+                        pass
+                    self.lock_file = None
+                time.sleep(0.1)
+                continue
+        
+        return False, time.time() - wait_start
     
     def _release_lock_windows(self):
-        """Windows 系统的锁释放"""
+        """Windows 系统的锁释放 - 删除锁文件"""
         if self.lock_file:
             try:
-                import msvcrt
-                file_handle = self.lock_file.fileno()
-                # 解锁文件
-                msvcrt.locking(file_handle, msvcrt.LK_UNLCK, 1024)
+                # 关闭文件
                 self.lock_file.close()
+                
+                # 删除锁文件
+                import os
+                if os.path.exists(self.lock_file_path):
+                    os.remove(self.lock_file_path)
+                    
             except Exception as e:
                 Logger.error(f"释放Windows锁时出错: {e}")
+                # 即使删除失败，也要尝试清理文件句柄
+                try:
+                    import os
+                    if os.path.exists(self.lock_file_path):
+                        os.remove(self.lock_file_path)
+                except:
+                    pass
             finally:
                 self.lock_file = None
     
@@ -276,25 +296,24 @@ class WeChatProcessLock:
             return False
     
     def _is_locked_windows(self):
-        """Windows系统检查锁状态"""
+        """Windows系统检查锁状态 - 基于文件存在性"""
+        import os
         try:
-            import msvcrt
-            test_file = open(self.lock_file_path, 'r')
-            try:
-                file_handle = test_file.fileno()
-                # 尝试锁定文件
-                msvcrt.locking(file_handle, msvcrt.LK_NBLCK, 1024)
-                # 如果成功，立即解锁
-                msvcrt.locking(file_handle, msvcrt.LK_UNLCK, 1024)
-                return False  # 锁可用
-            except OSError:
-                return True   # 锁被占用
-            finally:
-                test_file.close()
-        except FileNotFoundError:
-            return False
+            # 简单检查锁文件是否存在
+            if os.path.exists(self.lock_file_path):
+                # 检查是否是僵尸锁文件
+                try:
+                    lock_age = time.time() - os.path.getmtime(self.lock_file_path)
+                    if lock_age > 300:  # 5分钟以上的锁文件可能是僵尸锁
+                        Logger.warning(f"检测到可能的僵尸锁文件，年龄: {lock_age:.1f}秒")
+                        return False  # 认为锁可用，让获取锁的逻辑来清理
+                    return True  # 锁被占用
+                except Exception:
+                    return True  # 出错时保守认为被占用
+            else:
+                return False  # 锁文件不存在，锁可用
         except Exception:
-            return False
+            return False  # 出错时认为锁可用
     
     def get_lock_info(self):
         """获取当前锁文件信息"""
