@@ -20,11 +20,7 @@ from environment import group_chat_name_dlb, group_chat_name_vip
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from utils.logger_utils import Logger
-<<<<<<< HEAD
-from utils.wechat_helper import send_message_to_multiple_recipients
-=======
-from utils.wechat import send_message
->>>>>>> aead1d7f56f8517d2dee467b83306322f2c1c5ae
+from utils.wechat import send_message, send_message_to_multiple_recipients
 
 
 @dataclass
