@@ -15,7 +15,7 @@ from micro_defs import BarColor
 import logging
 
 from power_wave_strategy.signal_series_manager import SignalSeriesManager
-from utils.wechat_helper import send_message, send_message_to_multiple_recipients
+from utils.wechat import send_message, send_message_to_multiple_recipients
 from threading import Timer
 from utils.date_utils import DateUtils
 from utils.trading_time_helper import TradingTimeHelper

@@ -3,7 +3,7 @@ import os
 import logging
 from datetime import timedelta
 from utils.date_utils import DateUtils
-from utils.wechat_helper import send_message
+from utils.wechat import send_message
 import environment
 from stock_data_manager import StockDataManager, StockFilter
 from mini_stock.utils.stock_price_utils import StockPriceUtils

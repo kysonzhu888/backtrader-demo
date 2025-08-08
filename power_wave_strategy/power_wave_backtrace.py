@@ -2,7 +2,7 @@ import pandas as pd
 
 import environment
 
-from utils.wechat_helper import send_message, send_message_to_multiple_recipients
+from utils.wechat import send_message, send_message_to_multiple_recipients
 
 AU_CONTRACT_MULTIPLIER = 1000  # 黄金等合约乘数
 

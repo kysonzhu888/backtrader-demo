@@ -12,7 +12,7 @@ from tools.feature_info import FeatureInfo
 import matplotlib.pyplot as plt
 
 from utils.pilot_helper import PilotHelper
-from utils.wechat_helper import send_message, send_file
+from utils.wechat import send_message, send_file
 import matplotlib
 from utils.tushare_helper import TushareHelper  # 新增
 

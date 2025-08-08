@@ -3,7 +3,7 @@ from utils.database_helper import DatabaseHelper
 from environment import group_chat_name_vip
 import logging
 
-from utils.wechat_helper import send_message
+from utils.wechat import send_message
 
 
 def get_news():

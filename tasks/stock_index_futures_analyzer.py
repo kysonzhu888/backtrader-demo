@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from utils.logger_utils import Logger
-from utils.wechat_helper import send_message
+from utils.wechat import send_message
 
 
 @dataclass
