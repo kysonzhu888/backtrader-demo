@@ -14,11 +14,13 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 
+from environment import group_chat_name_dlb, group_chat_name_vip
+
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from utils.logger_utils import Logger
-from utils.wechat_helper import send_message
+from utils.wechat_helper import send_message_to_multiple_recipients
 
 
 @dataclass
@@ -436,7 +438,7 @@ class FuturesNetShortAnalyzer:
             report = self.generate_report(summaries, target_date)
             
             # 7. 发送微信消息
-            success = send_message(report, "老公老婆")
+            success = send_message_to_multiple_recipients(report,[group_chat_name_dlb,group_chat_name_vip])
             if success:
                 Logger.info("股指期货净空单分析报告已发送")
             else:
