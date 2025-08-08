@@ -8,11 +8,17 @@
 
 import os
 import time
-import fcntl
 import threading
 import tempfile
+import platform
 from contextlib import contextmanager
 from utils.logger_utils import Logger
+
+# 跨平台文件锁实现
+if platform.system() == 'Windows':
+    import msvcrt
+else:
+    import fcntl
 
 
 class WeChatProcessLock:
@@ -34,6 +40,7 @@ class WeChatProcessLock:
         self.lock_file_path = lock_file_path
         self.default_timeout = timeout
         self.lock_file = None
+        self.is_windows = platform.system() == 'Windows'
         
         # 统计信息
         self.stats = {
@@ -44,7 +51,101 @@ class WeChatProcessLock:
             'total_wait_time': 0.0
         }
         
-        Logger.info(f"微信进程锁初始化完成，锁文件: {self.lock_file_path}")
+        Logger.info(f"微信进程锁初始化完成，锁文件: {self.lock_file_path} (平台: {platform.system()})")
+    
+    def _acquire_lock_unix(self, timeout):
+        """Unix/Linux/MacOS 系统的锁获取"""
+        import fcntl
+        
+        try:
+            # 打开锁文件
+            self.lock_file = open(self.lock_file_path, 'w')
+            
+            # 尝试获取独占锁
+            lock_acquired = False
+            wait_start = time.time()
+            
+            while time.time() - wait_start < timeout:
+                try:
+                    # 尝试非阻塞获取独占锁
+                    fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    lock_acquired = True
+                    break
+                except BlockingIOError:
+                    # 锁被其他进程占用，等待一小段时间后重试
+                    time.sleep(0.1)
+            
+            return lock_acquired, time.time() - wait_start
+            
+        except Exception as e:
+            if self.lock_file:
+                self.lock_file.close()
+                self.lock_file = None
+            raise e
+    
+    def _release_lock_unix(self):
+        """Unix/Linux/MacOS 系统的锁释放"""
+        if self.lock_file:
+            try:
+                import fcntl
+                fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
+                self.lock_file.close()
+            except Exception as e:
+                Logger.error(f"释放Unix锁时出错: {e}")
+            finally:
+                self.lock_file = None
+    
+    def _acquire_lock_windows(self, timeout):
+        """Windows 系统的锁获取"""
+        try:
+            # Windows 使用文件独占打开方式
+            wait_start = time.time()
+            
+            while time.time() - wait_start < timeout:
+                try:
+                    # 尝试独占方式打开文件
+                    self.lock_file = open(self.lock_file_path, 'w')
+                    # Windows 下，如果文件已被其他进程打开，上面的操作会成功
+                    # 所以我们使用 msvcrt.locking 进行文件锁定
+                    
+                    # 获取文件句柄
+                    import msvcrt
+                    file_handle = self.lock_file.fileno()
+                    
+                    # 尝试锁定文件的前1024字节
+                    msvcrt.locking(file_handle, msvcrt.LK_NBLCK, 1024)
+                    
+                    return True, time.time() - wait_start
+                    
+                except (PermissionError, OSError) as e:
+                    # 文件被锁定，关闭文件句柄，等待后重试
+                    if self.lock_file:
+                        self.lock_file.close()
+                        self.lock_file = None
+                    time.sleep(0.1)
+                    continue
+            
+            return False, time.time() - wait_start
+            
+        except Exception as e:
+            if self.lock_file:
+                self.lock_file.close()
+                self.lock_file = None
+            raise e
+    
+    def _release_lock_windows(self):
+        """Windows 系统的锁释放"""
+        if self.lock_file:
+            try:
+                import msvcrt
+                file_handle = self.lock_file.fileno()
+                # 解锁文件
+                msvcrt.locking(file_handle, msvcrt.LK_UNLCK, 1024)
+                self.lock_file.close()
+            except Exception as e:
+                Logger.error(f"释放Windows锁时出错: {e}")
+            finally:
+                self.lock_file = None
     
     @contextmanager
     def acquire(self, operation_type="unknown", recipient=None, timeout=None):
@@ -68,30 +169,17 @@ class WeChatProcessLock:
         Logger.info(f"[PID:{process_id}][{thread_name}] 正在等待微信进程锁 - 操作: {operation_type}, 接收者: {recipient}")
         
         try:
-            # 打开锁文件
-            self.lock_file = open(self.lock_file_path, 'w')
-            
-            # 尝试获取独占锁
-            lock_acquired = False
-            wait_start = time.time()
-            
-            while time.time() - wait_start < timeout:
-                try:
-                    # 尝试非阻塞获取独占锁
-                    fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    lock_acquired = True
-                    break
-                except BlockingIOError:
-                    # 锁被其他进程占用，等待一小段时间后重试
-                    time.sleep(0.1)
+            # 根据平台选择锁获取方式
+            if self.is_windows:
+                lock_acquired, wait_time = self._acquire_lock_windows(timeout)
+            else:
+                lock_acquired, wait_time = self._acquire_lock_unix(timeout)
             
             if not lock_acquired:
-                wait_time = time.time() - wait_start
                 self.stats['timeout_failures'] += 1
                 Logger.error(f"[PID:{process_id}][{thread_name}] 获取微信进程锁超时 ({wait_time:.2f}s)")
                 raise TimeoutError(f"获取微信进程锁超时 ({wait_time:.2f}s)")
             
-            wait_time = time.time() - wait_start
             self.stats['successful_locks'] += 1
             self.stats['total_wait_time'] += wait_time
             if wait_time > self.stats['max_wait_time']:
@@ -119,8 +207,10 @@ class WeChatProcessLock:
             # 释放锁
             if self.lock_file:
                 try:
-                    fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
-                    self.lock_file.close()
+                    if self.is_windows:
+                        self._release_lock_windows()
+                    else:
+                        self._release_lock_unix()
                     total_time = time.time() - start_time
                     Logger.info(f"[PID:{process_id}][{thread_name}] 已释放微信进程锁 (总耗时: {total_time:.2f}s)")
                 except Exception as e:
@@ -162,6 +252,19 @@ class WeChatProcessLock:
     def is_locked(self):
         """检查锁文件是否被占用"""
         try:
+            if self.is_windows:
+                return self._is_locked_windows()
+            else:
+                return self._is_locked_unix()
+        except FileNotFoundError:
+            return False  # 锁文件不存在，锁可用
+        except Exception:
+            return False  # 其他错误，假设锁可用
+    
+    def _is_locked_unix(self):
+        """Unix系统检查锁状态"""
+        import fcntl
+        try:
             with open(self.lock_file_path, 'r') as f:
                 try:
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -170,9 +273,28 @@ class WeChatProcessLock:
                 except BlockingIOError:
                     return True   # 锁被占用
         except FileNotFoundError:
-            return False  # 锁文件不存在，锁可用
+            return False
+    
+    def _is_locked_windows(self):
+        """Windows系统检查锁状态"""
+        try:
+            import msvcrt
+            test_file = open(self.lock_file_path, 'r')
+            try:
+                file_handle = test_file.fileno()
+                # 尝试锁定文件
+                msvcrt.locking(file_handle, msvcrt.LK_NBLCK, 1024)
+                # 如果成功，立即解锁
+                msvcrt.locking(file_handle, msvcrt.LK_UNLCK, 1024)
+                return False  # 锁可用
+            except OSError:
+                return True   # 锁被占用
+            finally:
+                test_file.close()
+        except FileNotFoundError:
+            return False
         except Exception:
-            return False  # 其他错误，假设锁可用
+            return False
     
     def get_lock_info(self):
         """获取当前锁文件信息"""
