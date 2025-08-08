@@ -115,6 +115,124 @@ ENV/
 env.bak/
 venv.bak/
 
+# ===== 项目特定文件 =====
+
+# 数据文件和缓存
+data/
+*/futures_data/
+tasks/futures_data/
+a_dash/app_cache/
+mini_stock/reports/
+mini_stock/stock_lists/
+reports/
+
+# 生成的图表和图片
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.svg
+
+# Excel和CSV数据文件
+*.csv
+*.xlsx
+*.xls
+
+# 缓存和临时文件
+*.json.bak
+*_cache/
+*.cache
+stock_cache.json
+@AutomationLog.txt
+
+# 但保留重要的配置文件
+!package.json
+!tsconfig.json
+!.vscode/settings.json
+
+# 测试和调试文件
+test_*.py
+debug_*.py
+*_test.py
+*_debug.py
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+futures_data.db
+
+# 日志文件
+*.log
+logs/
+log/
+
+# 配置和敏感信息
+environment.py
+config.py
+secrets.py
+.env.local
+.env.production
+.env.development
+*.key
+*.pem
+*.p12
+
+# IDE和编辑器
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===== 项目特定模式 =====
+
+# 备份文件
+*.backup
+*.bak
+*_backup.py
+*_old.py
+
+# 临时输出文件
+output/
+temp/
+tmp/
+screenshots/
+
+# 策略和报告输出
+*_report_*.txt
+*_strategy_*.py
+holder_trade_report_*.txt
+
+# 实盘交易相关（敏感）
+trading_*.py
+live_trading_*
+production_*
+
 # Spyder project settings
 .spyderproject
 .spyproject

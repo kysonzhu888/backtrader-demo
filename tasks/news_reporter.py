@@ -74,10 +74,48 @@ def get_news():
     return coins + [ratio_im_if]
 
 
+def run_news_reporter():
+    """
+    定时执行早间新闻播报
+    每天8:05执行
+    """
+    from threading import Timer
+    from datetime import datetime
+    from utils.logger_utils import Logger
+    
+    # 获取当前时间
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    
+    if current_hour == 8 and current_minute >= 5 and current_minute <= 10:  # 每天8:05-8:10执行
+        Logger.info("早间新闻播报任务开始执行...", save_to_file=True)
+        
+        try:
+            news_report()
+            Logger.info("早间新闻播报任务执行完成", save_to_file=True)
+        except Exception as e:
+            Logger.error(f"早间新闻播报任务执行失败: {e}", save_to_file=True)
+    else:
+        Logger.info(f"当前时间 {current_hour}:{current_minute:02d}，早间新闻播报等待8:05执行")
+    
+    # 每10分钟检查一次
+    Timer(10 * 60, run_news_reporter).start()
+
+
 def news_report():
     msg = "早安啊，新的一天又开始了，让我们看看昨天有什么值得关注的吧！\n" + "\n".join(get_news())
     send_message(msg, group_chat_name_vip)
 
+
 if __name__ == '__main__':
-    # 直接运行任务（用于测试）
-    news_report()
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
+        # 守护进程模式
+        from utils.logger_utils import Logger
+        Logger.info("早间新闻播报器启动 - 守护进程模式")
+        run_news_reporter()
+    else:
+        # 直接运行模式（用于测试）
+        news_report()

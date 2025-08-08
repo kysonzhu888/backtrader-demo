@@ -225,6 +225,34 @@ class FeaturesDailyReport:
 
 
 # 定义定时任务
+def run_features_daily_report():
+    """
+    定时执行期货日报任务
+    每天8:38执行
+    """
+    from threading import Timer
+    from utils.logger_utils import Logger
+    
+    # 获取当前时间
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    
+    if current_hour == 8 and current_minute >= 38 and current_minute <= 45:  # 每天8:38-8:45执行
+        Logger.info("期货日报任务开始执行...", save_to_file=True)
+        
+        try:
+            run_daily_report()
+            Logger.info("期货日报任务执行完成", save_to_file=True)
+        except Exception as e:
+            Logger.error(f"期货日报任务执行失败: {e}", save_to_file=True)
+    else:
+        Logger.info(f"当前时间 {current_hour}:{current_minute:02d}，期货日报等待8:38执行")
+    
+    # 每10分钟检查一次
+    Timer(10 * 60, run_features_daily_report).start()
+
+
 def run_daily_report():
     db_helper = DatabaseHelper()
     mapping_ts_codes = db_helper.get_all_mapping_ts_codes()
@@ -262,5 +290,13 @@ def run_daily_report():
 
 
 if __name__ == "__main__":
-    # 直接运行任务（用于测试）
-    run_daily_report()
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
+        # 守护进程模式
+        from utils.logger_utils import Logger
+        Logger.info("期货日报器启动 - 守护进程模式")
+        run_features_daily_report()
+    else:
+        # 直接运行模式（用于测试）
+        run_daily_report()

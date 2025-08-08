@@ -123,6 +123,35 @@ class FeaturesWeeklyReport:
 
 
 # 示例调用
+def run_features_weekly_report():
+    """
+    定时执行期货周报任务
+    每周一7:25执行
+    """
+    from threading import Timer
+    from utils.logger_utils import Logger
+    
+    # 获取当前时间
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    weekday = now.weekday()  # 0=周一
+    
+    if weekday == 0 and current_hour == 7 and current_minute >= 25 and current_minute <= 32:  # 每周一7:25-7:32执行
+        Logger.info("期货周报任务开始执行...", save_to_file=True)
+        
+        try:
+            run_weekly_report()
+            Logger.info("期货周报任务执行完成", save_to_file=True)
+        except Exception as e:
+            Logger.error(f"期货周报任务执行失败: {e}", save_to_file=True)
+    else:
+        Logger.info(f"当前时间 周{weekday+1} {current_hour}:{current_minute:02d}，期货周报等待周一7:25执行")
+    
+    # 每小时检查一次
+    Timer(60 * 60, run_features_weekly_report).start()
+
+
 def run_weekly_report():
     db_helper = DatabaseHelper()
     mapping_ts_codes = db_helper.get_all_mapping_ts_codes()
@@ -144,5 +173,13 @@ def run_weekly_report():
 
 
 if __name__ == "__main__":
-    # 直接运行任务（用于测试）
-    run_weekly_report()
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
+        # 守护进程模式
+        from utils.logger_utils import Logger
+        Logger.info("期货周报器启动 - 守护进程模式")
+        run_features_weekly_report()
+    else:
+        # 直接运行模式（用于测试）
+        run_weekly_report()

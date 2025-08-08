@@ -85,55 +85,12 @@ class TaskScheduler:
             frequency=TaskFrequency.DAILY
         ))
         
-        # 期货日报 - 每日
-        self.register_task(TaskConfig(
-            name="features_daily_report",
-            function=self._import_and_run_task("features_daily_report", "run_daily_report"),
-            hour=8, minute=38,
-            description="期货日报 - 每日商品期货涨跌统计",
-            frequency=TaskFrequency.DAILY,
-            run_in_main_thread=True  # 微信相关任务在主线程中执行
-        ))
-        
-        # 早间新闻播报 - 每日 8:05
-        self.register_task(TaskConfig(
-            name="news_reporter",
-            function=self._import_and_run_task("news_reporter", "news_report"),
-            hour=8, minute=5,
-            description="早间新闻播报 - 财经新闻和比特币价格",
-            frequency=TaskFrequency.DAILY,
-            run_in_main_thread=True  # 微信相关任务在主线程中执行
-        ))
-        
-        # 天气播报 - 每2小时执行一次
-        # self.register_task(TaskConfig(
-        #     name="weather_report",
-        #     function=self._import_and_run_task("weather_report", "run_weather_report"),
-        #     hour=0, minute=12,
-        #     description="天气播报 - 每2小时播报一次天气信息",
-        #     frequency=TaskFrequency.CUSTOM,
-        #     custom_interval_hours=2,
-        #     run_in_main_thread=True  # 微信相关任务在主线程中执行
-        # ))
-        
-        # 期货周报 - 每周一 7:25
-        self.register_task(TaskConfig(
-            name="features_weekly_report",
-            function=self._import_and_run_task("features_weekly_report", "run_weekly_report"),
-            hour=7, minute=25,
-            description="期货周报 - 每周商品期货涨跌统计",
-            frequency=TaskFrequency.WEEKLY,
-            run_in_main_thread=True  # 微信相关任务在主线程中执行
-        ))
-        
-        # 期货月报 - 每月1号 7:30
-        self.register_task(TaskConfig(
-            name="features_monthly_report",
-            function=self._import_and_run_task("features_monthly_report", "run_monthly_report"),
-            hour=7, minute=30,
-            description="期货月报 - 每月商品期货涨跌统计",
-            frequency=TaskFrequency.MONTHLY
-        ))
+        # 注意: 以下任务已迁移到独立脚本模式，通过daemon.py管理
+        # - news_reporter (早间新闻播报)
+        # - features_daily_report (期货日报)  
+        # - features_weekly_report (期货周报)
+        # - features_monthly_report (期货月报)
+        # - stock_index_futures_analyzer (股指期货分析)
         
         # 港股TOP10播报 - 每日 19:30
         # self.register_task(TaskConfig(
@@ -155,14 +112,7 @@ class TaskScheduler:
         #     run_in_main_thread=True  # 微信相关任务在主线程中执行
         # ))
         
-        # 数据库清理 - 每日 2:00
-        self.register_task(TaskConfig(
-            name="regular_cleanup_db",
-            function=self._import_and_run_task("regular_cleanup_db", "run_cleanup"),
-            hour=2, minute=0,
-            description="数据库清理 - 清理过期数据",
-            frequency=TaskFrequency.DAILY
-        ))
+        # 数据库清理任务已迁移到独立脚本模式
         
         # 持仓交易策略 - 每日 14:30
         # self.register_task(TaskConfig(

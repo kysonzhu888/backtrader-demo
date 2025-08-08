@@ -14,35 +14,51 @@ def get_python_executable():
         return os.path.join(os.getcwd(), '.venv', 'bin', 'python')
 
 
-def start_process(script_name):
+def start_process(script_name, args=None):
     python_executable = get_python_executable()
 
     script_path = os.path.join(os.getcwd(), script_name)
-    return subprocess.Popen([python_executable, script_path])
+    cmd = [python_executable, script_path]
+    if args:
+        cmd.extend(args)
+    return subprocess.Popen(cmd)
 
 
 PROCESS_CONFIG = {
-    # "main.py": "main.py",
-    "pow_wave_strategy.py": os.path.join("power_wave_strategy", "pow_wave_strategy.py"),
-    "task_scheduler.py": "task_scheduler.py",
-    # # "stock_market_service.py": os.path.join("mini_stock", "stock_market_service.py"),
-    "features_min_loader.py": os.path.join("pinbar_strategy", "features_min_loader.py"),
-    "if_amount_realtime.py": os.path.join("monitor", "if_amount_realtime.py"),
-    "live_news.py": os.path.join("tasks", "live_news.py"),
-    "hk_top10_broadcaster.py": os.path.join("tasks", "hk_top10_broadcaster.py"),
-    "weather_report.py": os.path.join("tasks", "weather_report.py"),
-    "holder_trade_strategy.py": os.path.join("tasks", "holder_trade_strategy.py"),
+    # "main.py": {"script": "main.py"},
+    "pow_wave_strategy.py": {"script": os.path.join("power_wave_strategy", "pow_wave_strategy.py")},
+    "task_scheduler.py": {"script": "task_scheduler.py"},
+    # # "stock_market_service.py": {"script": os.path.join("mini_stock", "stock_market_service.py")},
+    "features_min_loader.py": {"script": os.path.join("pinbar_strategy", "features_min_loader.py")},
+    "if_amount_realtime.py": {"script": os.path.join("monitor", "if_amount_realtime.py")},
+    "live_news.py": {"script": os.path.join("tasks", "live_news.py")},
+    "hk_top10_broadcaster.py": {"script": os.path.join("tasks", "hk_top10_broadcaster.py")},
+    "weather_report.py": {"script": os.path.join("tasks", "weather_report.py")},
+    "holder_trade_strategy.py": {"script": os.path.join("tasks", "holder_trade_strategy.py")},
+    "stock_index_futures_analyzer.py": {"script": os.path.join("tasks", "stock_index_futures_analyzer.py"), "args": ["--daemon"]},
+    "news_reporter.py": {"script": os.path.join("tasks", "news_reporter.py"), "args": ["--daemon"]},
+    "features_daily_report.py": {"script": os.path.join("tasks", "features_daily_report.py"), "args": ["--daemon"]},
+    "features_weekly_report.py": {"script": os.path.join("tasks", "features_weekly_report.py"), "args": ["--daemon"]},
+    "features_monthly_report.py": {"script": os.path.join("tasks", "features_monthly_report.py"), "args": ["--daemon"]},
+    "regular_cleanup_db.py": {"script": os.path.join("tasks", "regular_cleanup_db.py"), "args": ["--daemon"]},
 }
 
 
 def monitor_processes():
-    processes = {name: start_process(script) for name, script in PROCESS_CONFIG.items()}
+    processes = {}
+    for name, config in PROCESS_CONFIG.items():
+        script = config["script"]
+        args = config.get("args")
+        processes[name] = start_process(script, args)
+    
     try:
         while True:
-            for name, script in PROCESS_CONFIG.items():
+            for name, config in PROCESS_CONFIG.items():
+                script = config["script"]
+                args = config.get("args")
                 if processes[name].poll() is not None:
                     print(f"{script} 已终止，正在重启...")
-                    processes[name] = start_process(script)
+                    processes[name] = start_process(script, args)
             time.sleep(5)
     except KeyboardInterrupt:
         print("守护进程已停止。")

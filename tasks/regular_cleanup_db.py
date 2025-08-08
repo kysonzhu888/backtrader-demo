@@ -124,6 +124,35 @@ class DatabaseCleaner:
         schedule.clear()
         logging.info("数据库清理服务已停止")
 
+def run_regular_cleanup_db():
+    """
+    定时执行数据库清理任务
+    每天2:00执行
+    """
+    from threading import Timer
+    from datetime import datetime
+    from utils.logger_utils import Logger
+    
+    # 获取当前时间
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    
+    if current_hour == 2 and current_minute >= 0 and current_minute <= 10:  # 每天2:00-2:10执行
+        Logger.info("数据库清理任务开始执行...", save_to_file=True)
+        
+        try:
+            run_cleanup()
+            Logger.info("数据库清理任务执行完成", save_to_file=True)
+        except Exception as e:
+            Logger.error(f"数据库清理任务执行失败: {e}", save_to_file=True)
+    else:
+        Logger.info(f"当前时间 {current_hour}:{current_minute:02d}，数据库清理等待2:00执行")
+    
+    # 每小时检查一次
+    Timer(60 * 60, run_regular_cleanup_db).start()
+
+
 # 统一调度器调用的函数
 def run_cleanup():
     """数据库清理任务 - 由统一调度器调用"""
@@ -134,5 +163,13 @@ def run_cleanup():
 
 
 if __name__ == "__main__":
-    # 直接运行任务（用于测试）
-    run_cleanup()
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
+        # 守护进程模式
+        from utils.logger_utils import Logger
+        Logger.info("数据库清理器启动 - 守护进程模式")
+        run_regular_cleanup_db()
+    else:
+        # 直接运行模式（用于测试）
+        run_cleanup()

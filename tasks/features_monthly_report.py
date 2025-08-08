@@ -96,6 +96,35 @@ class FeaturesMonthlyReport:
 
 
 # 统一调度器调用的函数
+def run_features_monthly_report():
+    """
+    定时执行期货月报任务
+    每月1号7:30执行
+    """
+    from threading import Timer
+    from utils.logger_utils import Logger
+    
+    # 获取当前时间
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    day = now.day
+    
+    if day == 1 and current_hour == 7 and current_minute >= 30 and current_minute <= 37:  # 每月1号7:30-7:37执行
+        Logger.info("期货月报任务开始执行...", save_to_file=True)
+        
+        try:
+            run_monthly_report()
+            Logger.info("期货月报任务执行完成", save_to_file=True)
+        except Exception as e:
+            Logger.error(f"期货月报任务执行失败: {e}", save_to_file=True)
+    else:
+        Logger.info(f"当前时间 {now.month}月{day}日 {current_hour}:{current_minute:02d}，期货月报等待每月1号7:30执行")
+    
+    # 每天检查一次
+    Timer(24 * 60 * 60, run_features_monthly_report).start()
+
+
 def run_monthly_report():
     """期货月报任务 - 由统一调度器调用"""
     api_key = environment.tushare_token  # 替换为你的API密钥
@@ -114,6 +143,14 @@ def run_monthly_report():
 
 
 if __name__ == "__main__":
-    # 直接运行任务（用于测试）
-    run_monthly_report()
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
+        # 守护进程模式
+        from utils.logger_utils import Logger
+        Logger.info("期货月报器启动 - 守护进程模式")
+        run_features_monthly_report()
+    else:
+        # 直接运行模式（用于测试）
+        run_monthly_report()
 
