@@ -12,6 +12,7 @@ import platform
 import threading
 import queue
 from utils.logger_utils import Logger
+from utils.wechat_queue_manager import acquire_wechat_window
 
 
 class WeChatHelperMainThreadFinal:
@@ -112,20 +113,22 @@ class WeChatHelperMainThreadFinal:
                 Logger.info(f"[模拟发送] {recipient}: {message}")
                 return True
             
-            with self._lock:
-                # 切换到目标聊天窗口
-                self.wx.ChatWith(recipient)
-                time.sleep(0.5)  # 等待窗口切换
-                
-                # 发送消息
-                result = self.wx.SendMsg(message, recipient)
-                
-                if result:
-                    Logger.info(f"消息发送成功: {recipient}")
-                    return True
-                else:
-                    Logger.error(f"消息发送失败: {recipient}")
-                    return False
+            # 使用队列管理器确保微信窗口访问的互斥性
+            with acquire_wechat_window('send_message', recipient):
+                with self._lock:
+                    # 切换到目标聊天窗口
+                    self.wx.ChatWith(recipient)
+                    time.sleep(0.8)  # 增加等待时间，确保窗口切换完成
+                    
+                    # 发送消息
+                    result = self.wx.SendMsg(message, recipient)
+                    
+                    if result:
+                        Logger.info(f"消息发送成功: {recipient}")
+                        return True
+                    else:
+                        Logger.error(f"消息发送失败: {recipient}")
+                        return False
                     
         except Exception as e:
             Logger.error(f"发送消息时出错: {str(e)}")
@@ -146,19 +149,21 @@ class WeChatHelperMainThreadFinal:
                 Logger.info(f"[模拟发送文件] {file_path}")
                 return True
             
-            with self._lock:
-                if recipient:
-                    # 如果有指定接收者，先切换到对应聊天窗口
-                    self.wx.ChatWith(recipient)
-                    time.sleep(0.5)  # 等待窗口切换
-                
-                result = self.wx.SendFiles(file_path)
-                if result:
-                    Logger.info(f"文件发送成功: {file_path}")
-                    return True
-                else:
-                    Logger.error(f"文件发送失败: {file_path}")
-                    return False
+            # 使用队列管理器确保微信窗口访问的互斥性
+            with acquire_wechat_window('send_file', recipient):
+                with self._lock:
+                    if recipient:
+                        # 如果有指定接收者，先切换到对应聊天窗口
+                        self.wx.ChatWith(recipient)
+                        time.sleep(0.8)  # 增加等待时间，确保窗口切换完成
+                    
+                    result = self.wx.SendFiles(file_path)
+                    if result:
+                        Logger.info(f"文件发送成功: {file_path}")
+                        return True
+                    else:
+                        Logger.error(f"文件发送失败: {file_path}")
+                        return False
                     
         except Exception as e:
             Logger.error(f"发送文件时出错: {str(e)}")
