@@ -278,7 +278,8 @@ from utils.wechat_process_lock import (
     get_wechat_lock_stats,
     reset_wechat_lock_stats,
     is_wechat_locked,
-    get_wechat_lock_info
+    get_wechat_lock_info,
+    cleanup_wechat_zombie_lock
 )
 
 __all__ = [
@@ -295,5 +296,6 @@ __all__ = [
     'get_wechat_lock_stats',
     'reset_wechat_lock_stats',
     'is_wechat_locked',
-    'get_wechat_lock_info'
+    'get_wechat_lock_info',
+    'cleanup_wechat_zombie_lock'
 ]

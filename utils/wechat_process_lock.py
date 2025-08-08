@@ -189,6 +189,11 @@ class WeChatProcessLock:
         Logger.info(f"[PID:{process_id}][{thread_name}] 正在等待微信进程锁 - 操作: {operation_type}, 接收者: {recipient}")
         
         try:
+            # 如果等待时间超过30秒，先尝试清理僵尸锁
+            if timeout > 30:
+                Logger.info("等待时间较长，先检查是否有僵尸锁...")
+                self.cleanup_zombie_lock()
+            
             # 根据平台选择锁获取方式
             if self.is_windows:
                 lock_acquired, wait_time = self._acquire_lock_windows(timeout)
@@ -317,15 +322,46 @@ class WeChatProcessLock:
     
     def get_lock_info(self):
         """获取当前锁文件信息"""
+        import os
         try:
             if os.path.exists(self.lock_file_path):
+                # 获取文件信息
+                stat_info = os.stat(self.lock_file_path)
+                file_age = time.time() - stat_info.st_mtime
+                
                 with open(self.lock_file_path, 'r') as f:
                     content = f.read().strip()
-                    if content:
-                        return content
-            return "锁文件不存在或为空"
+                    
+                if content:
+                    return f"{content} | 文件年龄: {file_age:.1f}秒"
+                else:
+                    return f"锁文件为空 | 文件年龄: {file_age:.1f}秒"
+            return "锁文件不存在"
         except Exception as e:
             return f"读取锁文件失败: {e}"
+    
+    def cleanup_zombie_lock(self):
+        """清理僵尸锁文件"""
+        import os
+        try:
+            if os.path.exists(self.lock_file_path):
+                # 检查文件年龄
+                lock_age = time.time() - os.path.getmtime(self.lock_file_path)
+                
+                if lock_age > 30:  # 30秒以上认为是僵尸锁
+                    Logger.warning(f"清理僵尸锁文件，年龄: {lock_age:.1f}秒")
+                    os.remove(self.lock_file_path)
+                    Logger.info("僵尸锁文件清理成功")
+                    return True
+                else:
+                    Logger.info(f"锁文件较新，年龄: {lock_age:.1f}秒，不清理")
+                    return False
+            else:
+                Logger.info("锁文件不存在，无需清理")
+                return True
+        except Exception as e:
+            Logger.error(f"清理僵尸锁文件失败: {e}")
+            return False
 
 
 # 全局锁实例
@@ -375,6 +411,12 @@ def get_wechat_lock_info():
     """获取微信进程锁信息"""
     lock = get_wechat_process_lock()
     return lock.get_lock_info()
+
+
+def cleanup_wechat_zombie_lock():
+    """清理微信僵尸锁文件"""
+    lock = get_wechat_process_lock()
+    return lock.cleanup_zombie_lock()
 
 
 if __name__ == "__main__":
