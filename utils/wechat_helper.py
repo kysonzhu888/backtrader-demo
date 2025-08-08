@@ -11,7 +11,7 @@ import os
 import platform
 import threading
 from utils.logger_utils import Logger
-from utils.wechat_queue_manager import acquire_wechat_window
+from utils.wechat_process_lock import acquire_wechat_process_lock
 
 
 class WeChatHelper:
@@ -78,8 +78,8 @@ class WeChatHelper:
                 Logger.info(f"[模拟发送] {recipient}: {message}")
                 return True
             
-            # 使用队列管理器确保微信窗口访问的互斥性
-            with acquire_wechat_window('send_message', recipient):
+            # 使用进程锁确保微信窗口访问的互斥性
+            with acquire_wechat_process_lock('send_message', recipient, timeout=60):
                 with self._lock:
                     # 切换到目标聊天窗口
                     self.wx.ChatWith(recipient)
@@ -119,8 +119,8 @@ class WeChatHelper:
                 Logger.info(f"[模拟发送文件] {file_path}")
                 return True
             
-            # 使用队列管理器确保微信窗口访问的互斥性
-            with acquire_wechat_window('send_file', recipient):
+            # 使用进程锁确保微信窗口访问的互斥性
+            with acquire_wechat_process_lock('send_file', recipient, timeout=60):
                 with self._lock:
                     if recipient:
                         # 如果有指定接收者，先切换到对应聊天窗口
