@@ -7,7 +7,7 @@ from threading import Timer
 from tenacity import sleep
 
 from utils.date_utils import DateUtils
-from utils.wechat_helper import send_message
+from utils.wechat import send_message
 
 from utils.tushare_helper import TushareHelper
 

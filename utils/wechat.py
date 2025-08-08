@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-优化版微信工具
-确保wxauto的所有操作都在主线程中执行
+统一的微信工具模块
+整合所有微信相关功能，提供简洁的API接口
 """
 
 import time
@@ -14,7 +14,9 @@ from utils.logger_utils import Logger
 from utils.wechat_process_lock import acquire_wechat_process_lock
 
 
-class WeChatHelper:
+class WeChat:
+    """统一的微信工具类"""
+    
     def __init__(self):
         """初始化微信客户端"""
         self.wx = None
@@ -45,8 +47,8 @@ class WeChatHelper:
                     Logger.info("调试模式：微信客户端未初始化")
                 else:
                     try:
-                        from wxauto import WeChat
-                        self.wx = WeChat()
+                        from wxauto import WeChat as WxAuto
+                        self.wx = WxAuto()
                         Logger.info("微信客户端初始化成功")
                     except Exception as e:
                         Logger.error(f"微信客户端初始化失败: {e}")
@@ -59,7 +61,16 @@ class WeChatHelper:
             return self.wx is not None
 
     def send_message(self, message, recipient):
-        """发送消息"""
+        """
+        发送消息
+        
+        Args:
+            message: 消息内容
+            recipient: 接收者
+            
+        Returns:
+            bool: 发送是否成功
+        """
         if not message or not message.strip():
             Logger.info("不发送空消息")
             return False
@@ -83,7 +94,7 @@ class WeChatHelper:
                 with self._lock:
                     # 切换到目标聊天窗口
                     self.wx.ChatWith(recipient)
-                    time.sleep(0.8)  # 增加等待时间，确保窗口切换完成
+                    time.sleep(0.8)  # 确保窗口切换完成
                     
                     # 发送消息
                     result = self.wx.SendMsg(message, recipient)
@@ -104,7 +115,16 @@ class WeChatHelper:
             return False
 
     def send_file(self, file_path, recipient=None):
-        """发送文件"""
+        """
+        发送文件
+        
+        Args:
+            file_path: 文件路径
+            recipient: 接收者（可选，如果不指定则发送到当前聊天窗口）
+            
+        Returns:
+            bool: 发送是否成功
+        """
         if not file_path or not os.path.exists(file_path):
             Logger.error(f"文件不存在: {file_path}")
             return False
@@ -125,7 +145,7 @@ class WeChatHelper:
                     if recipient:
                         # 如果有指定接收者，先切换到对应聊天窗口
                         self.wx.ChatWith(recipient)
-                        time.sleep(0.8)  # 增加等待时间，确保窗口切换完成
+                        time.sleep(0.8)  # 确保窗口切换完成
                     
                     result = self.wx.SendFiles(file_path)
                     if result:
@@ -142,6 +162,30 @@ class WeChatHelper:
                 Logger.error("检测到COM错误，这通常是因为在子线程中调用wxauto导致的")
                 Logger.error("建议在任务调度器中设置微信任务在主线程中执行")
             return False
+
+    def send_message_to_multiple_recipients(self, message, recipients):
+        """
+        发送消息给多个接收者
+        
+        Args:
+            message: 消息内容
+            recipients: 接收者列表
+            
+        Returns:
+            int: 成功发送的数量
+        """
+        success_count = 0
+        
+        if not isinstance(recipients, list):
+            recipients = [recipients]
+        
+        for recipient in recipients:
+            if recipient and recipient.strip():
+                if self.send_message(message, recipient):
+                    success_count += 1
+        
+        Logger.info(f"已向 {success_count}/{len(recipients)} 个接收者发送消息")
+        return success_count
 
     def get_client(self):
         """获取微信客户端实例"""
@@ -167,11 +211,12 @@ def get_wechat_instance():
     
     with _wechat_lock:
         if _wechat_instance is None:
-            Logger.info("创建优化版微信实例...")
-            _wechat_instance = WeChatHelper()
+            Logger.info("创建统一版微信实例...")
+            _wechat_instance = WeChat()
         return _wechat_instance
 
 
+# 便捷方法 - 向后兼容原有API
 def send_message(message, recipient):
     """发送消息的便捷方法"""
     wechat = get_wechat_instance()
@@ -180,19 +225,8 @@ def send_message(message, recipient):
 
 def send_message_to_multiple_recipients(message, recipients):
     """发送消息给多个接收者的便捷方法"""
-    success_count = 0
-    
-    if not isinstance(recipients, list):
-        recipients = [recipients]
-    
-    for recipient in recipients:
-        if recipient and recipient.strip():
-            wechat = get_wechat_instance()
-            if wechat.send_message(message, recipient):
-                success_count += 1
-    
-    Logger.info(f"已向 {success_count}/{len(recipients)} 个接收者发送消息")
-    return success_count
+    wechat = get_wechat_instance()
+    return wechat.send_message_to_multiple_recipients(message, recipients)
 
 
 def send_file(file_path, recipient=None):
@@ -222,13 +256,13 @@ def force_reinitialize():
 def get_send_stats():
     """获取发送统计信息（兼容性方法，无统计）"""
     return {
-        'note': '优化版微信工具无统计功能'
+        'note': '统一版微信工具无统计功能'
     }
 
 
 def clear_sent_messages():
     """清理已发送消息记录（兼容性方法，无记录）"""
-    Logger.info("优化版微信工具无消息记录需要清理")
+    Logger.info("统一版微信工具无消息记录需要清理")
 
 
 def reset_wechat_instance():
@@ -236,4 +270,32 @@ def reset_wechat_instance():
     global _wechat_instance
     with _wechat_lock:
         _wechat_instance = None
-        Logger.info("优化版微信实例已重置") 
+        Logger.info("统一版微信实例已重置")
+
+
+# 导出进程锁监控功能
+from utils.wechat_process_lock import (
+    get_wechat_lock_stats,
+    reset_wechat_lock_stats,
+    is_wechat_locked,
+    get_wechat_lock_info,
+    cleanup_wechat_zombie_lock
+)
+
+__all__ = [
+    'WeChat',
+    'send_message',
+    'send_message_to_multiple_recipients', 
+    'send_file',
+    'get_client',
+    'check_wechat_health',
+    'force_reinitialize',
+    'get_send_stats',
+    'clear_sent_messages',
+    'reset_wechat_instance',
+    'get_wechat_lock_stats',
+    'reset_wechat_lock_stats',
+    'is_wechat_locked',
+    'get_wechat_lock_info',
+    'cleanup_wechat_zombie_lock'
+]

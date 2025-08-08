@@ -7,7 +7,7 @@ from utils.date_utils import DateUtils
 from environment import group_chat_name_vip
 import logging
 
-from utils.wechat_helper import send_message, send_message_to_multiple_recipients
+from utils.wechat import send_message, send_message_to_multiple_recipients
 
 
 class PinbarReporter:

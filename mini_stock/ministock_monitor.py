@@ -4,7 +4,7 @@ import requests
 from datetime import datetime
 from utils.date_utils import DateUtils
 import environment
-from utils.wechat_helper import send_message
+from utils.wechat import send_message
 
 
 class MiniStockMonitor:

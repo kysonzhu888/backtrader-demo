@@ -5,7 +5,7 @@ from power_wave_backup import PowerWave
 import backtrader as bt
 
 from text_utils import TextUtils
-from utils.wechat_helper import send_message, send_message_to_multiple_recipients
+from utils.wechat import send_message, send_message_to_multiple_recipients
 from utils.database_helper import DatabaseHelper
 from power_wave_helper import PowerWaveHelper
 

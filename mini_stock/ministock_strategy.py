@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 import logging
 from utils.date_utils import DateUtils
-from utils.wechat_helper import send_message
+from utils.wechat import send_message
 import environment
 from xtquant import xtdata
 # from xtquant.xttype import StockItem

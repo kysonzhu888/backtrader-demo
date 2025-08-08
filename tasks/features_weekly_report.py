@@ -14,7 +14,7 @@ from utils.pilot_helper import PilotHelper
 import matplotlib
 
 from utils.tushare_helper import TushareHelper
-from utils.wechat_helper import send_message, send_file
+from utils.wechat import send_message, send_file
 
 matplotlib.use('Agg')
 

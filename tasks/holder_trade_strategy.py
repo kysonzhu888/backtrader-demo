@@ -8,7 +8,7 @@ from datetime import datetime
 import time
 import os
 from utils.tushare_helper import TushareHelper
-from utils.wechat_helper import send_message, send_file
+from utils.wechat import send_message, send_file
 from utils.date_utils import DateUtils
 from typing import Optional
 

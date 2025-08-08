@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 import json
 from utils.logger_utils import Logger
-from utils.wechat_helper import send_message
+from utils.wechat import send_message
 from utils.date_utils import DateUtils
 
 
