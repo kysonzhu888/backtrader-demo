@@ -447,15 +447,19 @@ class BollStrategy:
         if self.position.is_empty():
             return False, None
         
-        # 硬止损
-        if abs(self.position.profit) >= self.config.HARD_STOP_LOSS:
-            return True, f"硬止损，亏损{self.position.profit:.2f}元"
-        
-        # 浮动止盈止损
+        # 先检查浮动止损（保本止损优先）
         if self.position.stop_loss_price > 0:
             if ((self.position.is_long() and current_price <= self.position.stop_loss_price) or
                 (self.position.is_short() and current_price >= self.position.stop_loss_price)):
-                return True, f"浮动止损，止损价{self.position.stop_loss_price:.2f}"
+                # 如果是保本止损，不算亏损
+                if self.position.breakeven_level > 0:
+                    return True, f"保本止损，止损价{self.position.stop_loss_price:.2f}"
+                else:
+                    return True, f"浮动止损，止损价{self.position.stop_loss_price:.2f}"
+        
+        # 再检查硬止损（只有在没有推保本的情况下才会硬止损）
+        if self.position.breakeven_level == 0 and self.position.profit < 0 and abs(self.position.profit) >= self.config.HARD_STOP_LOSS:
+            return True, f"硬止损，亏损{abs(self.position.profit):.2f}元"
         
         return False, None
     
@@ -481,7 +485,9 @@ class BollStrategy:
             else:
                 self.position.stop_loss_price = self.position.entry_price
             
-            message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{current.name}\n开仓价格：{self.position.entry_price:.2f}，ATR：{current_atr:.2f}，当前价格：{current['close']:.2f}\n盈利超过 2 个ATR，推保本，恭喜这单不会亏钱了。"
+            # 格式化时间，去掉微秒
+            time_str = current.name.strftime('%Y-%m-%d %H:%M:%S') if hasattr(current.name, 'strftime') else str(current.name)
+            message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n开仓价格：{self.position.entry_price:.2f}，ATR：{current_atr:.2f}，当前价格：{current['close']:.2f}\n盈利超过 2 个ATR，推保本，恭喜这单不会亏钱了。"
             send_message(message, self.config.WECHAT_GROUP)
             Logger.info(f"推保本 - {message}")
         
@@ -507,7 +513,9 @@ class BollStrategy:
         
         direction_text = "多" if direction == 1 else "空"
         
-        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{current_time}\n{reason}\n满足开仓条件，开仓方向：{direction_text}\n开仓价格：{price:.2f}"
+        # 格式化时间，去掉微秒
+        time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n{reason}\n满足开仓条件，开仓方向：{direction_text}\n开仓价格：{price:.2f}"
         
         send_message(message, self.config.WECHAT_GROUP)
         Logger.info(f"开仓 - 方向: {direction_text}, 价格: {price:.2f}, 原因: {reason}")
@@ -529,7 +537,16 @@ class BollStrategy:
         if "止损" in reason:
             self.last_loss_time = current_time
         
-        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{current_time}\n开仓价格：{self.position.entry_price:.2f}，当前价格：{price:.2f}\n{reason}，本单{'盈利' if profit >= 0 else '亏损'}：{profit:.2f}元"
+        # 格式化时间，去掉微秒
+        time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 修正盈亏描述
+        if profit >= 0:
+            profit_desc = f"盈利{abs(profit):.2f}元"
+        else:
+            profit_desc = f"亏损{abs(profit):.2f}元"
+        
+        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n开仓价格：{self.position.entry_price:.2f}，当前价格：{price:.2f}\n{reason}，本单{profit_desc}"
         
         send_message(message, self.config.WECHAT_GROUP)
         Logger.info(f"平仓 - {direction_text}仓, 价格: {price:.2f}, 盈亏: {profit:.2f}, 原因: {reason}")
@@ -780,15 +797,19 @@ class BollStrategy:
         # 更新持仓当前价格和盈亏
         self.position.update_current_price(current_price)
         
-        # 检查硬止损
-        if abs(self.position.profit) >= self.config.HARD_STOP_LOSS:
-            return True, f"硬止损，亏损{self.position.profit:.2f}元"
-        
-        # 检查浮动止损
+        # 先检查浮动止损（保本止损优先）
         if self.position.stop_loss_price > 0:
             if ((self.position.is_long() and current_price <= self.position.stop_loss_price) or
                 (self.position.is_short() and current_price >= self.position.stop_loss_price)):
-                return True, f"浮动止损，止损价{self.position.stop_loss_price:.2f}"
+                # 如果是保本止损，不算亏损
+                if self.position.breakeven_level > 0:
+                    return True, f"保本止损，止损价{self.position.stop_loss_price:.2f}"
+                else:
+                    return True, f"浮动止损，止损价{self.position.stop_loss_price:.2f}"
+        
+        # 再检查硬止损（只有在没有推保本的情况下才会硬止损）
+        if self.position.breakeven_level == 0 and self.position.profit < 0 and abs(self.position.profit) >= self.config.HARD_STOP_LOSS:
+            return True, f"硬止损，亏损{abs(self.position.profit):.2f}元"
         
         return False, None
     
