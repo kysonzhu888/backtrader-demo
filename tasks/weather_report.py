@@ -1,6 +1,8 @@
 import logging
+import random
 import urllib.parse
 from threading import Timer
+from time import sleep
 
 import urllib3
 from datetime import datetime
@@ -127,4 +129,6 @@ def run_weather_report():
 
 if __name__ == "__main__":
     # 直接运行任务（用于测试）
+    sleep(random.randint(1,10))
+
     run_weather_report()

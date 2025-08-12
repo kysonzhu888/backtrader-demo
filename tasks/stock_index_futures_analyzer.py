@@ -7,8 +7,12 @@
 """
 
 import os
+import random
 import sys
 import csv
+
+from time import sleep
+
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
@@ -501,7 +505,7 @@ def run_stock_index_futures_analysis(first_run=False):
     """
     from threading import Timer
     from datetime import datetime
-    
+
     # 获取当前时间
     now = datetime.now()
     current_hour = now.hour
@@ -544,6 +548,8 @@ def run_stock_index_futures_analysis(first_run=False):
 
 def main():
     """主函数 - 用于直接测试"""
+    sleep(random.randint(1,10))
+
     analyzer = FuturesNetShortAnalyzer()
     success = analyzer.run_analysis()
     if success:

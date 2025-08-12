@@ -12,8 +12,11 @@
 """
 
 import os
+import random
 import sys
 import time
+from time import sleep
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -1048,6 +1051,7 @@ class BollStrategy:
 
 def main():
     """主函数"""
+    sleep(random.randint(1,10))
     strategy = BollStrategy()
     
     try:
