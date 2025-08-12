@@ -635,10 +635,12 @@ class BollStrategy:
                 
                 # 设置时间索引
                 # 处理时间戳，迅投返回的是毫秒时间戳
+                # 注意：迅投返回的时间戳是UTC时间，需要转换为北京时间（UTC+8）
                 df['time'] = pd.to_datetime(df['time'], unit='ms')
                 
-                # 确保时间是本地时间（北京时间）
-                # 注意：如果时间显示不正确，可能需要调整时区
+                # 简单方法：直接加8小时转换为北京时间
+                df['time'] = df['time'] + pd.Timedelta(hours=8)
+                
                 df.set_index('time', inplace=True)
                 
                 # 过滤掉非交易时间的数据
