@@ -123,15 +123,25 @@ class FuturesNetShortAnalyzer:
         """
         获取目标日期
         下午5点前使用昨天的数据，5点后使用今天的数据
+        周末和节假日需要特殊处理
         """
         now = datetime.now()
         
         if now.hour < 17:  # 下午5点前
             target_date = now - timedelta(days=1)
-            Logger.info(f"当前时间{now.hour}:00，使用昨天的数据: {target_date.strftime('%Y-%m-%d')}")
+            Logger.info(f"当前时间{now.strftime('%H:%M')}，使用昨天的数据: {target_date.strftime('%Y-%m-%d')}")
         else:
             target_date = now
-            Logger.info(f"当前时间{now.hour}:00，使用今天的数据: {target_date.strftime('%Y-%m-%d')}")
+            Logger.info(f"当前时间{now.strftime('%H:%M')}，使用今天的数据: {target_date.strftime('%Y-%m-%d')}")
+        
+        # 检查是否为周末，如果是周末则使用周五的数据
+        weekday = target_date.weekday()
+        if weekday == 5:  # 周六
+            target_date = target_date - timedelta(days=1)
+            Logger.info(f"今天是周六，调整为使用周五的数据: {target_date.strftime('%Y-%m-%d')}")
+        elif weekday == 6:  # 周日
+            target_date = target_date - timedelta(days=2)
+            Logger.info(f"今天是周日，调整为使用周五的数据: {target_date.strftime('%Y-%m-%d')}")
         
         return target_date
     
@@ -348,31 +358,39 @@ class FuturesNetShortAnalyzer:
                 zx_total_net_short += summary.zx_net_short
                 zx_total_change += summary.zx_net_short_change
                 
-                change_desc = "加空" if summary.zx_net_short_change > 0 else "减空"
-                zx_details.append(f"{contract}{change_desc}{abs(summary.zx_net_short_change)}手")
+                if summary.zx_net_short_change != 0:
+                    change_desc = "加空" if summary.zx_net_short_change > 0 else "减空"
+                    zx_details.append(f"{contract}{change_desc}{abs(summary.zx_net_short_change)}手")
                 
                 # 其他玩家数据
                 others_total_net_short += summary.others_net_short
                 others_total_change += summary.others_net_short_change
                 
-                change_desc = "加空" if summary.others_net_short_change > 0 else "减空"
-                others_details.append(f"{contract}{change_desc}{abs(summary.others_net_short_change)}手")
+                if summary.others_net_short_change != 0:
+                    change_desc = "加空" if summary.others_net_short_change > 0 else "减空"
+                    others_details.append(f"{contract}{change_desc}{abs(summary.others_net_short_change)}手")
         
         # 中信部分
-        zx_change_desc = "加空" if zx_total_change > 0 else "减空"
-        report_lines.append(f"🏢 某信，{zx_change_desc}{abs(zx_total_change)}手；")
-        if zx_details:
-            detail_str = "，".join([d for d in zx_details if "0手" not in d])
-            if detail_str:
-                report_lines.append(f"   分别{detail_str}；")
+        if zx_total_change != 0:
+            zx_change_desc = "加空" if zx_total_change > 0 else "减空"
+            report_lines.append(f"🏢 某信，{zx_change_desc}{abs(zx_total_change)}手；")
+            if zx_details:
+                detail_str = "，".join(zx_details)
+                if detail_str:
+                    report_lines.append(f"   分别{detail_str}；")
+        else:
+            report_lines.append(f"🏢 某信，今日持仓无变化；")
         
         # 其他玩家部分
-        others_change_desc = "加空" if others_total_change > 0 else "减空"
-        report_lines.append(f"👥 其他主要玩家，{others_change_desc}{abs(others_total_change)}手；")
-        if others_details:
-            detail_str = "，".join([d for d in others_details if "0手" not in d])
-            if detail_str:
-                report_lines.append(f"   分别{detail_str}；")
+        if others_total_change != 0:
+            others_change_desc = "加空" if others_total_change > 0 else "减空"
+            report_lines.append(f"👥 其他主要玩家，{others_change_desc}{abs(others_total_change)}手；")
+            if others_details:
+                detail_str = "，".join(others_details)
+                if detail_str:
+                    report_lines.append(f"   分别{detail_str}；")
+        else:
+            report_lines.append(f"👥 其他主要玩家，今日持仓无变化；")
         
         # 总计
         total_net_short = zx_total_net_short + others_total_net_short
@@ -394,15 +412,20 @@ class FuturesNetShortAnalyzer:
         
         return "\n".join(report_lines)
     
-    def run_analysis(self) -> bool:
+    def run_analysis(self, retry_count=0, max_retries=3) -> bool:
         """
-        运行完整的分析流程
+        运行完整的分析流程，支持重试
         
+        Args:
+            retry_count: 当前重试次数
+            max_retries: 最大重试次数
+            
         Returns:
             bool: 是否成功
         """
         try:
-            Logger.info("开始股指期货净空单量分析...")
+            retry_msg = f"重试第{retry_count}次" if retry_count > 0 else ""
+            Logger.info(f"开始股指期货净空单量分析...{retry_msg}")
             
             # 1. 确定目标日期
             target_date = self.get_target_date()
@@ -419,6 +442,12 @@ class FuturesNetShortAnalyzer:
             
             if not downloaded_files:
                 Logger.error("没有成功下载任何数据文件")
+                # 尝试重试
+                if retry_count < max_retries:
+                    Logger.info(f"等待30秒后重试...")
+                    import time
+                    time.sleep(30)
+                    return self.run_analysis(retry_count + 1, max_retries)
                 return False
             
             # 4. 解析CSV数据
@@ -438,7 +467,7 @@ class FuturesNetShortAnalyzer:
             report = self.generate_report(summaries, target_date)
             
             # 7. 发送微信消息
-            success = send_message_to_multiple_recipients(report,[group_chat_name_dlb,group_chat_name_vip])
+            success = send_message_to_multiple_recipients(report, [group_chat_name_dlb, group_chat_name_vip])
             if success:
                 Logger.info("股指期货净空单分析报告已发送")
             else:
@@ -446,14 +475,26 @@ class FuturesNetShortAnalyzer:
                 Logger.info("分析报告内容:")
                 Logger.info(report)
             
+            # 保存报告到文件
+            report_file = os.path.join(self.data_dir, f"report_{target_date.strftime('%Y%m%d')}.txt")
+            with open(report_file, 'w', encoding='utf-8') as f:
+                f.write(report)
+            Logger.info(f"报告已保存到: {report_file}")
+            
             return True
             
         except Exception as e:
             Logger.error(f"分析过程出错: {e}")
+            # 尝试重试
+            if retry_count < max_retries:
+                Logger.info(f"等待30秒后重试...")
+                import time
+                time.sleep(30)
+                return self.run_analysis(retry_count + 1, max_retries)
             return False
 
 
-def run_stock_index_futures_analysis():
+def run_stock_index_futures_analysis(first_run=False):
     """
     定时执行股指期货净空单分析
     每天17:00执行
@@ -464,6 +505,16 @@ def run_stock_index_futures_analysis():
     # 获取当前时间
     now = datetime.now()
     current_hour = now.hour
+    current_minute = now.minute
+    
+    # 首次启动时发送通知
+    if first_run:
+        startup_msg = f"🚀 股指期货分析器已启动\n⏰ 将在每天17:00自动执行分析\n📍 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+        try:
+            send_message(group_chat_name_dlb, startup_msg)
+            Logger.info("启动通知已发送到老公老婆群")
+        except Exception as e:
+            Logger.warning(f"发送启动通知失败: {e}")
     
     if current_hour == 17:  # 每天17:00执行
         Logger.info("股指期货净空单分析任务开始执行...", save_to_file=True)
@@ -476,10 +527,19 @@ def run_stock_index_futures_analysis():
         else:
             Logger.error("股指期货净空单量分析失败", save_to_file=True)
     else:
-        Logger.info(f"当前时间 {current_hour}:00，股指期货分析任务等待17:00执行")
+        # 计算距离下次执行的时间
+        if current_hour < 17:
+            hours_to_wait = 17 - current_hour
+            minutes_to_wait = -current_minute
+        else:
+            hours_to_wait = 24 - current_hour + 17
+            minutes_to_wait = -current_minute
+        
+        total_minutes = hours_to_wait * 60 + minutes_to_wait
+        Logger.info(f"当前时间 {now.strftime('%H:%M')}，股指期货分析任务将在约{total_minutes}分钟后（17:00）执行")
     
     # 每小时检查一次
-    Timer(60 * 60, run_stock_index_futures_analysis).start()
+    Timer(60 * 60, lambda: run_stock_index_futures_analysis(False)).start()
 
 
 def main():
@@ -498,7 +558,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
         # 守护进程模式
         Logger.info("股指期货净空单分析器启动 - 守护进程模式")
-        run_stock_index_futures_analysis()
+        run_stock_index_futures_analysis(first_run=True)
     else:
         # 直接运行模式（用于测试）
         main()
