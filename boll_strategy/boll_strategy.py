@@ -161,9 +161,10 @@ class BollStrategy:
         """获取主力合约代码"""
         try:
             # 使用迅投市场代码ZF获取郑商所合约列表
+            Logger.info("="*50)
             Logger.info("开始获取郑商所合约列表...")
             codes = xtdata.get_stock_list_in_sector("ZF")
-            Logger.info(f"获取到郑商所合约总数: {len(codes)}")
+            Logger.info(f"获取到郑商所合约总数: {len(codes)}个")
             
             # 过滤出菜籽油期货合约（排除期权）
             oi_futures = []
@@ -190,7 +191,11 @@ class BollStrategy:
                                     seen_contracts.add(code)
                                     Logger.debug(f"保留期货合约: {code}")
             
-            Logger.info(f"菜籽油期货合约数: {len(oi_futures)}, 期权合约数: {len(oi_options)}")
+            Logger.info(f"菜籽油期货合约数: {len(oi_futures)}个, 期权合约数: {len(oi_options)}个")
+            
+            # 输出期货合约列表
+            if oi_futures:
+                Logger.info(f"期货合约列表: {', '.join(oi_futures[:10])}等")  # 只显示前10个
             
             if not oi_futures:
                 Logger.error("未找到菜籽油期货合约")
@@ -221,12 +226,13 @@ class BollStrategy:
             # 输出成交量排名
             if contract_volumes:
                 sorted_contracts = sorted(contract_volumes.items(), key=lambda x: x[1], reverse=True)
-                Logger.info("合约成交量排名:")
-                for i, (contract, volume) in enumerate(sorted_contracts[:5], 1):  # 显示前5个
-                    Logger.info(f"  {i}. {contract}: {volume}")
+                Logger.info("合约成交量排名(前5):")
+                for i, (contract, volume) in enumerate(sorted_contracts[:5], 1):
+                    Logger.info(f"  {i}. {contract}: 成交量={volume}")
             
             if main_contract:
-                Logger.info(f"✅ 选择主力合约: {main_contract} (成交量: {max_volume})")
+                Logger.info(f"✅ 最终选择主力合约: {main_contract} (成交量: {max_volume})")
+                Logger.info("="*50)
                 return main_contract
             else:
                 # 如果无法获取成交量，根据月份选择（通常选择最近的活跃月份）
@@ -266,6 +272,40 @@ class BollStrategy:
         except Exception as e:
             Logger.error(f"获取主力合约失败: {e}")
             return None
+    
+    def _log_market_status(self, latest_data):
+        """记录当前市场状态和布林线位置"""
+        try:
+            close = latest_data.get('close', 0)
+            open_price = latest_data.get('open', 0)
+            high = latest_data.get('high', 0)
+            low = latest_data.get('low', 0)
+            upper = latest_data.get('UPPER', 0)
+            middle = latest_data.get('MIDDLE', 0)
+            lower = latest_data.get('LOWER', 0)
+            
+            # 计算收盘价在布林线中的位置
+            position_pct = 0
+            if upper > lower:
+                position_pct = ((close - lower) / (upper - lower)) * 100
+            
+            # 判断K线颜色
+            color = "红" if close >= open_price else "绿"
+            
+            Logger.info(f"📈 当前走势 - 开:{open_price:.2f} 高:{high:.2f} 低:{low:.2f} 收:{close:.2f} ({color})")
+            Logger.info(f"📍 布林线位置 - 上轨:{upper:.2f} 中轨:{middle:.2f} 下轨:{lower:.2f}")
+            Logger.info(f"📊 相对位置: {position_pct:.1f}% (0%=下轨, 50%=中轨, 100%=上轨)")
+            
+            # 判断当前位置状态
+            if close > upper:
+                Logger.info("⚠️ 当前价格突破上轨")
+            elif close < lower:
+                Logger.info("⚠️ 当前价格突破下轨")
+            elif abs(close - middle) / middle < 0.001:
+                Logger.info("📍 当前价格接近中轨")
+                
+        except Exception as e:
+            Logger.debug(f"记录市场状态失败: {e}")
     
     def filter_trading_hours(self, df):
         """过滤非交易时间的数据"""
@@ -653,7 +693,12 @@ class BollStrategy:
                 df = self.calculate_indicators(df)
                 
                 if not df.empty:
+                    latest = df.iloc[-1]
                     Logger.debug(f"获取到K线数据，行数: {len(df)}, 最新时间: {df.index[-1].strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    # 输出最新K线和布林线信息
+                    if 'UPPER' in df.columns and 'LOWER' in df.columns and 'MIDDLE' in df.columns:
+                        self._log_market_status(latest)
                 else:
                     Logger.warning("获取到的K线数据为空")
                 
@@ -807,14 +852,14 @@ class BollStrategy:
                         self.close_position(current_price, stop_reason, current_time)
                     return
                 else:
-                    # 每30秒输出一次持仓状态
+                    # 每60秒输出一次持仓状态
                     if not hasattr(self, '_last_position_log_time'):
                         self._last_position_log_time = current_time
                     
-                    if (current_time - self._last_position_log_time).total_seconds() >= 30:
+                    if (current_time - self._last_position_log_time).total_seconds() >= 60:
                         self._last_position_log_time = current_time
                         direction_text = "多" if self.position.is_long() else "空"
-                        Logger.debug(f"持仓状态 - 方向: {direction_text}, 开仓价: {self.position.entry_price:.2f}, "
+                        Logger.info(f"📊 持仓状态 - 方向: {direction_text}, 开仓价: {self.position.entry_price:.2f}, "
                                    f"当前价: {self.position.current_price:.2f}, 盈亏: {self.position.profit:.2f}元")
             
             # 2. 每分钟检查一次开平仓信号（基于K线收盘价）
@@ -827,13 +872,13 @@ class BollStrategy:
                 self._last_signal_check_minute = current_time.minute
                 self._last_signal_check_time = current_time
                 
-                Logger.debug(f"执行信号检查 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                Logger.debug(f"🔍 执行信号检查 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 signal_result = self.check_signals_with_kline(contract_code)
                 
                 if signal_result == "open":
-                    Logger.info(f"新开仓位")
+                    Logger.info(f"📢 新开仓位")
                 elif signal_result == "close":
-                    Logger.info(f"平仓完成")
+                    Logger.info(f"📤 平仓完成")
                 else:
                     Logger.debug(f"无交易信号")
             
@@ -925,6 +970,22 @@ class BollStrategy:
         """启动策略"""
         self.is_running = True
         
+        # 策略启动通知
+        Logger.info("="*50)
+        Logger.info("🚀 布林线策略正在启动...")
+        Logger.info(f"策略版本: V2.2")
+        Logger.info(f"交易品种: {self.config.PRODUCT_NAME}({self.config.PRODUCT_TYPE})")
+        Logger.info(f"布林线参数: {self.config.BOLL_PERIOD}周期, {self.config.BOLL_STD}倍标准差")
+        Logger.info(f"风控参数: 硬止损{self.config.HARD_STOP_LOSS}元, ATR倍数{self.config.ATR_MULTIPLIER_FOR_PROFIT}")
+        Logger.info("="*50)
+        
+        # 发送启动通知到"老公老婆"群
+        startup_msg = f"【策略启动通知】\n布林线策略已启动\n品种: {self.config.PRODUCT_NAME}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        try:
+            send_message(startup_msg, "老公老婆")
+        except Exception as e:
+            Logger.warning(f"发送启动通知失败: {e}")
+        
         # 从Redis恢复持仓信息
         self._load_position_from_redis()
         
@@ -943,7 +1004,8 @@ class BollStrategy:
         Logger.info("等待数据推送稳定...")
         time.sleep(3)
         
-        Logger.info(f"布林线策略启动 - 合约: {contract_code}")
+        Logger.info(f"✅ 布林线策略启动成功 - 合约: {contract_code}")
+        Logger.info("="*50)
         
         try:
             while self.is_running:
@@ -952,15 +1014,36 @@ class BollStrategy:
                 
         except KeyboardInterrupt:
             Logger.info("接收到中断信号，策略停止")
+            # 发送中断通知
+            interrupt_msg = f"【策略中断】\n布林线策略被手动中断\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            try:
+                send_message(interrupt_msg, "老公老婆")
+            except:
+                pass
         except Exception as e:
             Logger.error(f"策略运行异常: {e}")
+            # 发送异常通知
+            error_msg = f"【策略异常】\n布林线策略出现异常\n错误: {str(e)[:100]}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            try:
+                send_message(error_msg, "老公老婆")
+            except:
+                pass
         finally:
             self.stop()
     
     def stop(self):
         """停止策略"""
         self.is_running = False
-        Logger.info("布林线策略已停止")
+        Logger.info("="*50)
+        Logger.info("🚫 布林线策略已停止")
+        Logger.info("="*50)
+        
+        # 发送停止通知
+        stop_msg = f"【策略停止通知】\n布林线策略已停止\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        try:
+            send_message(stop_msg, "老公老婆")
+        except Exception as e:
+            Logger.warning(f"发送停止通知失败: {e}")
 
 
 def main():
