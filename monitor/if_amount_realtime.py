@@ -72,8 +72,10 @@ def callback_func(data):
 
 
 try:
-    msg = f'[{code}] 异动开始监控...'
-    send_message(msg, environment.group_chat_name_monitor)
+    # 发送启动通知  
+    startup_msg = f"【策略启动通知】\n沪深300异动监控已启动\n品种: {code}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    send_message(startup_msg, environment.group_chat_name_monitor)
+    logging.info(f"🚀 沪深300异动监控启动成功 - 品种: {code}")
 
     # 订阅实时行情
     xtdata.subscribe_quote(code, period='1m', count=-1, callback=callback_func)
@@ -83,8 +85,19 @@ try:
 
 except KeyboardInterrupt:
     logging.info("\n程序已退出")
+    # 发送停止通知
+    stop_msg = f"【策略停止通知】\n沪深300异动监控已停止\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    try:
+        send_message(stop_msg, environment.group_chat_name_monitor)
+    except:
+        pass
 except Exception as e:
     logging.error(f'发生错误：{str(e)}')
     import traceback
-
     logging.error("详细错误信息:", traceback.format_exc())
+    # 发送异常通知
+    error_msg = f"【策略异常】\n沪深300异动监控出现异常\n错误: {str(e)[:100]}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    try:
+        send_message(error_msg, environment.group_chat_name_monitor)
+    except:
+        pass

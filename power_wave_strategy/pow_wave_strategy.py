@@ -444,11 +444,16 @@ if __name__ == "__main__":
 
     # 根据环境启动对应的定时任务
     if os.getenv('DEBUG_MODE') == '1':
-        msg = f"[power wave] 开始监控 DEBUG环境 {product_type} {interval} 实时交易..."
+        # 发送启动通知
+        startup_msg = f"【策略启动通知】\n动力波策略已启动\n品种: {product_type}\n周期: {interval}\n环境: DEBUG\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        send_message_to_multiple_recipients(startup_msg, [environment.group_chat_name_monitor])
+        Logger.info(f"🚀 动力波策略启动成功 - 品种: {product_type}, 周期: {interval}, 环境: DEBUG")
+        
         run_debug_tasks(data_gen, strategy)
     else:
-        msg = f"[power wave] 开始监控 真实环境 {product_type} {interval} 实时交易..."
-
+        # 发送启动通知
+        startup_msg = f"【策略启动通知】\n动力波策略已启动\n品种: {product_type}\n周期: {interval}\n环境: 真实\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        send_message_to_multiple_recipients(startup_msg, [environment.group_chat_name_monitor])
+        Logger.info(f"🚀 动力波策略启动成功 - 品种: {product_type}, 周期: {interval}, 环境: 真实")
+        
         run_prod_tasks(data_gen, strategy)
-
-    send_message_to_multiple_recipients(msg, [environment.group_chat_name_monitor])
