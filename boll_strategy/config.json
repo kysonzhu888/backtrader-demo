@@ -1,0 +1,47 @@
+{
+    "strategy_name": "布林线策略",
+    "version": "1.0",
+    "
+    "product_config": {
+        "product_type": "OI",
+        "product_name": "菜籽油",
+        "contract_multiplier": 10,
+        "exchange": "CZCE"
+    },
+    
+    "data_config": {
+        "data_interval_seconds": 6,
+        "kline_period": "1min",
+        "warmup_period": 30
+    },
+    
+    "indicator_config": {
+        "boll_period": 20,
+        "boll_std": 2.0,
+        "atr_period": 14,
+        "atr_multiplier_for_profit": 2.0
+    },
+    
+    "risk_config": {
+        "hard_stop_loss_amount": 380,
+        "no_open_minutes_after_open": 15,
+        "no_open_minutes_before_close": 15,
+        "no_open_minutes_after_loss": 30
+    },
+    
+    "notification_config": {
+        "wechat_group": "动力波策略群",
+        "enable_notifications": true
+    },
+    
+    "trading_sessions": {
+        "day_session": [
+            ["09:00", "10:15"],
+            ["10:30", "11:30"], 
+            ["13:30", "15:00"]
+        ],
+        "night_session": [
+            ["21:00", "23:00"]
+        ]
+    }
+}

@@ -1,0 +1,977 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+布林线策略
+策略逻辑：
+- 突破上轨做多，回撤到中轨平多单
+- 突破下轨做空，回撤到中轨平空单
+- 硬止损：380元（可配置）
+- 浮动止盈：盈利超过2个ATR后推保本，之后每盈利2个ATR推进1个ATR
+- 开仓保护：开盘后15分钟、收盘前15分钟不开仓，止损后30分钟不开仓
+"""
+
+import os
+import sys
+import time
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import threading
+import redis
+import json
+import logging
+
+# 添加项目路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import environment
+from utils.logger_utils import Logger
+from utils.wechat import send_message
+from utils.trading_time_helper import TradingTimeHelper
+from utils.date_utils import DateUtils
+from xtquant import xtdata
+
+
+class BollStrategyConfig:
+    """布林线策略配置"""
+    
+    # 品种配置
+    PRODUCT_TYPE = 'OI'  # 菜籽油
+    PRODUCT_NAME = '菜籽油'
+    CONTRACT_MULTIPLIER = 10  # 菜籽油一个点10元
+    
+    # 数据配置
+    DATA_INTERVAL = 6  # 数据拉取间隔（秒）
+    KLINE_PERIOD = '1min'  # 关注的K线周期
+    WARMUP_PERIOD = 30  # 预热期（需要足够的数据计算指标）
+    
+    # 布林线参数
+    BOLL_PERIOD = 20  # 布林线周期
+    BOLL_STD = 2.0  # 标准差倍数
+    
+    # ATR参数
+    ATR_PERIOD = 14  # ATR周期
+    ATR_MULTIPLIER_FOR_PROFIT = 2.0  # 浮动止盈的ATR倍数
+    
+    # 风控参数
+    HARD_STOP_LOSS = 380  # 硬止损金额（元）
+    HARD_STOP_LOSS_POINTS = HARD_STOP_LOSS / CONTRACT_MULTIPLIER  # 转换为点数
+    
+    # 开仓保护时间
+    NO_OPEN_MINUTES_AFTER_OPEN = 15  # 开盘后不开仓时间（分钟）
+    NO_OPEN_MINUTES_BEFORE_CLOSE = 15  # 收盘前不开仓时间（分钟）
+    NO_OPEN_MINUTES_AFTER_LOSS = 30  # 止损后不开仓时间（分钟）
+    
+    # 微信播报
+    WECHAT_GROUP = "动力波策略群"
+
+
+class Position:
+    """持仓信息"""
+    
+    def __init__(self):
+        self.direction = 0  # 0: 空仓, 1: 多仓, -1: 空仓
+        self.entry_price = 0.0  # 开仓价格
+        self.entry_time = None  # 开仓时间
+        self.current_price = 0.0  # 当前价格
+        self.stop_loss_price = 0.0  # 止损价格
+        self.profit = 0.0  # 当前盈亏
+        self.max_profit = 0.0  # 最大盈利
+        self.atr_at_entry = 0.0  # 开仓时的ATR值
+        self.breakeven_level = 0  # 保本级别（0: 未保本, 1+: 保本级别）
+    
+    def update_current_price(self, price):
+        """更新当前价格和盈亏"""
+        self.current_price = price
+        if self.direction == 1:  # 多仓
+            self.profit = (price - self.entry_price) * BollStrategyConfig.CONTRACT_MULTIPLIER
+        elif self.direction == -1:  # 空仓
+            self.profit = (self.entry_price - price) * BollStrategyConfig.CONTRACT_MULTIPLIER
+        
+        if self.profit > self.max_profit:
+            self.max_profit = self.profit
+    
+    def is_empty(self):
+        """是否空仓"""
+        return self.direction == 0
+    
+    def is_long(self):
+        """是否多仓"""
+        return self.direction == 1
+    
+    def is_short(self):
+        """是否空仓"""
+        return self.direction == -1
+    
+    def clear(self):
+        """清空持仓"""
+        self.__init__()
+
+
+class BollStrategy:
+    """布林线策略主类"""
+    
+    def __init__(self):
+        self.config = BollStrategyConfig()
+        self.position = Position()
+        self.data_buffer = pd.DataFrame()  # 数据缓冲区
+        self.last_loss_time = None  # 上次止损时间
+        self.is_running = False
+        self.data_lock = threading.Lock()
+        self.main_contract = None  # 主力合约代码
+        
+        # 初始化Redis缓存
+        self.redis_client = redis.Redis(
+            host=environment.REDIS_HOST,
+            port=environment.REDIS_PORT,
+            db=environment.REDIS_DB,
+            password=environment.REDIS_PASSWORD,
+            decode_responses=True
+        )
+        
+        # 交易时间助手
+        self.trading_helper = TradingTimeHelper(self.config.PRODUCT_TYPE)
+        
+        Logger.info(f"布林线策略初始化完成 - 品种: {self.config.PRODUCT_NAME}({self.config.PRODUCT_TYPE})")
+    
+    def is_option_contract(self, code):
+        """判断是否为期权合约"""
+        # 先去掉交易所后缀再判断
+        code_without_exchange = code.split('.')[0] if '.' in code else code
+        
+        # 郑商所期权的识别规则：
+        # 期货合约格式：OI509.ZF, OI601.ZF 等（OI + 月份）
+        # 期权合约格式：OI509C9700.ZF, OI509P9700.ZF 等（包含C或P + 行权价）
+        
+        # 检查是否包含C或P（表示期权）
+        # 注意：不是 -C- 或 -P-，而是直接的C或P后跟数字
+        if len(code_without_exchange) > 5:  # 期权代码通常更长
+            # 检查是否符合期权格式：品种代码+月份+C/P+行权价
+            if 'C' in code_without_exchange[4:] or 'P' in code_without_exchange[4:]:
+                # 确认C或P后面跟着数字（行权价）
+                for i, char in enumerate(code_without_exchange):
+                    if char in ['C', 'P'] and i > 3:  # 确保C/P不是品种代码的一部分
+                        if i + 1 < len(code_without_exchange) and code_without_exchange[i + 1].isdigit():
+                            return True
+        
+        return False
+    
+    def get_main_contract(self):
+        """获取主力合约代码"""
+        try:
+            # 使用迅投市场代码ZF获取郑商所合约列表
+            Logger.info("开始获取郑商所合约列表...")
+            codes = xtdata.get_stock_list_in_sector("ZF")
+            Logger.info(f"获取到郑商所合约总数: {len(codes)}")
+            
+            # 过滤出菜籽油期货合约（排除期权）
+            oi_futures = []
+            oi_options = []
+            seen_contracts = set()  # 用于去重
+            
+            for code in codes:
+                if code.startswith("OI"):
+                    if self.is_option_contract(code):
+                        oi_options.append(code)
+                        # Logger.debug(f"排除期权合约: {code}")  # 减少日志输出
+                    else:
+                        # 进一步过滤：只保留标准的期货合约格式
+                        # 标准格式：OI + 3或4位数字 + .ZF
+                        code_without_exchange = code.split('.')[0] if '.' in code else code
+                        
+                        # 过滤掉特殊合约（如OIL0, OIL1, OIL9等）
+                        if not any(char.isalpha() for char in code_without_exchange[2:]):
+                            # 确保是数字月份格式
+                            if len(code_without_exchange) >= 4 and len(code_without_exchange) <= 6:
+                                # 去重处理（有些合约可能重复）
+                                if code not in seen_contracts:
+                                    oi_futures.append(code)
+                                    seen_contracts.add(code)
+                                    Logger.debug(f"保留期货合约: {code}")
+            
+            Logger.info(f"菜籽油期货合约数: {len(oi_futures)}, 期权合约数: {len(oi_options)}")
+            
+            if not oi_futures:
+                Logger.error("未找到菜籽油期货合约")
+                return None
+            
+            # 获取合约详情，选择主力合约（通常成交量最大）
+            main_contract = None
+            max_volume = 0
+            contract_volumes = {}
+            
+            Logger.info("开始分析各合约成交量...")
+            for contract in oi_futures:
+                try:
+                    # 获取实时行情数据来判断主力合约
+                    tick_data = xtdata.get_full_tick([contract])
+                    if tick_data and contract in tick_data:
+                        volume = tick_data[contract].get('volume', 0)
+                        contract_volumes[contract] = volume
+                        Logger.debug(f"合约 {contract} 成交量: {volume}")
+                        
+                        if volume > max_volume:
+                            max_volume = volume
+                            main_contract = contract
+                except Exception as e:
+                    Logger.debug(f"获取合约{contract}行情失败: {e}")
+                    continue
+            
+            # 输出成交量排名
+            if contract_volumes:
+                sorted_contracts = sorted(contract_volumes.items(), key=lambda x: x[1], reverse=True)
+                Logger.info("合约成交量排名:")
+                for i, (contract, volume) in enumerate(sorted_contracts[:5], 1):  # 显示前5个
+                    Logger.info(f"  {i}. {contract}: {volume}")
+            
+            if main_contract:
+                Logger.info(f"✅ 选择主力合约: {main_contract} (成交量: {max_volume})")
+                return main_contract
+            else:
+                # 如果无法获取成交量，根据月份选择（通常选择最近的活跃月份）
+                # 郑商所菜籽油主力合约通常是1、5、9月
+                current_date = datetime.now()
+                current_year = current_date.year % 100  # 取年份后两位
+                current_month = current_date.month
+                
+                # 主力合约月份
+                main_months = [1, 5, 9]
+                
+                # 找到最近的主力合约月份
+                best_contract = None
+                for contract in oi_futures:
+                    code_without_exchange = contract.split('.')[0] if '.' in contract else contract
+                    # 尝试解析月份（如OI509中的09）
+                    if len(code_without_exchange) >= 4:
+                        try:
+                            month_code = code_without_exchange[2:4]
+                            month = int(month_code)
+                            if month in [1, 5, 9]:  # 是主力合约月份
+                                if best_contract is None:
+                                    best_contract = contract
+                                    Logger.debug(f"找到主力合约候选: {contract}")
+                        except:
+                            continue
+                
+                if best_contract:
+                    main_contract = best_contract
+                    Logger.warning(f"⚠️ 基于月份规则选择合约: {main_contract}")
+                else:
+                    main_contract = oi_futures[0]
+                    Logger.warning(f"⚠️ 默认选择第一个合约: {main_contract}")
+                
+                return main_contract
+            
+        except Exception as e:
+            Logger.error(f"获取主力合约失败: {e}")
+            return None
+    
+    def filter_trading_hours(self, df):
+        """过滤非交易时间的数据"""
+        if df.empty:
+            return df
+        
+        # 菜籽油交易时间
+        # 日盘: 09:00-10:15, 10:30-11:30, 13:30-15:00
+        # 夜盘: 21:00-23:00
+        
+        filtered_rows = []
+        for idx, row in df.iterrows():
+            hour = idx.hour
+            minute = idx.minute
+            time_val = hour * 100 + minute
+            
+            # 检查是否在交易时间内
+            if ((900 <= time_val <= 1015) or  # 早盘第一节
+                (1030 <= time_val <= 1130) or  # 早盘第二节
+                (1330 <= time_val <= 1500) or  # 午盘
+                (2100 <= time_val <= 2300)):   # 夜盘
+                filtered_rows.append(row)
+        
+        if filtered_rows:
+            result_df = pd.DataFrame(filtered_rows)
+            result_df.index = [row.name for row in filtered_rows]
+            return result_df
+        else:
+            return pd.DataFrame()
+    
+    def calculate_indicators(self, df):
+        """计算技术指标"""
+        if len(df) < max(self.config.BOLL_PERIOD, self.config.ATR_PERIOD):
+            return df
+        
+        # 计算布林线
+        df['MA'] = df['close'].rolling(window=self.config.BOLL_PERIOD).mean()
+        df['STD'] = df['close'].rolling(window=self.config.BOLL_PERIOD).std()
+        df['UPPER'] = df['MA'] + (df['STD'] * self.config.BOLL_STD)
+        df['LOWER'] = df['MA'] - (df['STD'] * self.config.BOLL_STD)
+        df['MIDDLE'] = df['MA']
+        
+        # 计算ATR
+        df['TR'] = np.maximum(
+            df['high'] - df['low'],
+            np.maximum(
+                abs(df['high'] - df['close'].shift(1)),
+                abs(df['low'] - df['close'].shift(1))
+            )
+        )
+        df['ATR'] = df['TR'].rolling(window=self.config.ATR_PERIOD).mean()
+        
+        return df
+    
+    def can_open_position(self, current_time):
+        """判断是否允许开仓"""
+        # 如果已有持仓，不允许开新仓
+        if not self.position.is_empty():
+            return False, "已有持仓"
+        
+        # 检查止损后的保护时间
+        if self.last_loss_time:
+            time_since_loss = (current_time - self.last_loss_time).total_seconds() / 60
+            if time_since_loss < self.config.NO_OPEN_MINUTES_AFTER_LOSS:
+                return False, f"止损后保护期，剩余{self.config.NO_OPEN_MINUTES_AFTER_LOSS - time_since_loss:.1f}分钟"
+        
+        # 检查交易时间
+        trading_hours = self.trading_helper.trading_time()
+        if not trading_hours:
+            return False, "非交易时间"
+        
+        # 检查开盘后和收盘前的保护时间
+        current_hour = current_time.hour
+        current_minute = current_time.minute
+        
+        # 菜籽油交易时间段
+        # 日盘: 09:00-10:15, 10:30-11:30, 13:30-15:00
+        # 夜盘: 21:00-23:00
+        
+        # 构造时间值用于比较
+        time_val = current_hour * 100 + current_minute
+        
+        # 开盘后15分钟保护
+        if (900 <= time_val < 915) or \
+           (2100 <= time_val < 2115):
+            return False, "开盘后15分钟保护期"
+        
+        # 收盘前15分钟保护
+        if (1000 <= time_val <= 1015) or \
+           (1115 <= time_val <= 1130) or \
+           (1445 <= time_val <= 1500) or \
+           (2245 <= time_val <= 2300):
+            return False, "收盘前15分钟保护期"
+        
+        return True, "允许开仓"
+    
+    def check_open_signal(self, df):
+        """检查开仓信号"""
+        if len(df) < 2:
+            return None, None
+        
+        current = df.iloc[-1]
+        previous = df.iloc[-2]
+        
+        # 突破上轨做多
+        if (previous['close'] <= previous['UPPER'] and 
+            current['close'] > current['UPPER']):
+            return 1, f"突破上轨：{current['UPPER']:.2f}"
+        
+        # 突破下轨做空
+        if (previous['close'] >= previous['LOWER'] and 
+            current['close'] < current['LOWER']):
+            return -1, f"突破下轨：{current['LOWER']:.2f}"
+        
+        return None, None
+    
+    def check_close_signal(self, df):
+        """检查平仓信号"""
+        if len(df) < 1 or self.position.is_empty():
+            return False, None
+        
+        current = df.iloc[-1]
+        
+        # 多仓回撤到中轨平仓
+        if self.position.is_long() and current['close'] <= current['MIDDLE']:
+            return True, f"多仓回撤到中轨：{current['MIDDLE']:.2f}"
+        
+        # 空仓回撤到中轨平仓
+        if self.position.is_short() and current['close'] >= current['MIDDLE']:
+            return True, f"空仓回撤到中轨：{current['MIDDLE']:.2f}"
+        
+        return False, None
+    
+    def check_stop_loss(self, current_price):
+        """检查止损"""
+        if self.position.is_empty():
+            return False, None
+        
+        # 硬止损
+        if abs(self.position.profit) >= self.config.HARD_STOP_LOSS:
+            return True, f"硬止损，亏损{self.position.profit:.2f}元"
+        
+        # 浮动止盈止损
+        if self.position.stop_loss_price > 0:
+            if ((self.position.is_long() and current_price <= self.position.stop_loss_price) or
+                (self.position.is_short() and current_price >= self.position.stop_loss_price)):
+                return True, f"浮动止损，止损价{self.position.stop_loss_price:.2f}"
+        
+        return False, None
+    
+    def update_trailing_stop(self, df):
+        """更新浮动止盈"""
+        if self.position.is_empty() or len(df) < 1:
+            return
+        
+        current = df.iloc[-1]
+        current_atr = current.get('ATR', self.position.atr_at_entry)
+        
+        if current_atr <= 0:
+            current_atr = self.position.atr_at_entry
+        
+        # 盈利超过2个ATR后开始推保本
+        atr_threshold = self.config.ATR_MULTIPLIER_FOR_PROFIT * current_atr * self.config.CONTRACT_MULTIPLIER
+        
+        if self.position.profit > atr_threshold and self.position.breakeven_level == 0:
+            # 推保本
+            self.position.breakeven_level = 1
+            if self.position.is_long():
+                self.position.stop_loss_price = self.position.entry_price
+            else:
+                self.position.stop_loss_price = self.position.entry_price
+            
+            message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{current.name}\n开仓价格：{self.position.entry_price:.2f}，ATR：{current_atr:.2f}，当前价格：{current['close']:.2f}\n盈利超过 2 个ATR，推保本，恭喜这单不会亏钱了。"
+            send_message(message, self.config.WECHAT_GROUP)
+            Logger.info(f"推保本 - {message}")
+        
+        # 每盈利2个ATR，止盈推进1个ATR
+        elif self.position.profit > atr_threshold * (self.position.breakeven_level + 1):
+            self.position.breakeven_level += 1
+            atr_move = current_atr
+            
+            if self.position.is_long():
+                self.position.stop_loss_price = self.position.entry_price + atr_move * (self.position.breakeven_level - 1)
+            else:
+                self.position.stop_loss_price = self.position.entry_price - atr_move * (self.position.breakeven_level - 1)
+            
+            Logger.info(f"浮动止盈更新 - 级别: {self.position.breakeven_level}, 止损价: {self.position.stop_loss_price:.2f}")
+    
+    def open_position(self, direction, price, reason, current_time, atr_value):
+        """开仓"""
+        self.position.direction = direction
+        self.position.entry_price = price
+        self.position.entry_time = current_time
+        self.position.current_price = price
+        self.position.atr_at_entry = atr_value
+        
+        direction_text = "多" if direction == 1 else "空"
+        
+        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{current_time}\n{reason}\n满足开仓条件，开仓方向：{direction_text}\n开仓价格：{price:.2f}"
+        
+        send_message(message, self.config.WECHAT_GROUP)
+        Logger.info(f"开仓 - 方向: {direction_text}, 价格: {price:.2f}, 原因: {reason}")
+        
+        # 保存到Redis
+        self._save_position_to_redis()
+    
+    def close_position(self, price, reason, current_time):
+        """平仓"""
+        if self.position.is_empty():
+            return
+        
+        self.position.update_current_price(price)
+        profit = self.position.profit
+        
+        direction_text = "多" if self.position.is_long() else "空"
+        
+        # 如果是止损，记录时间
+        if "止损" in reason:
+            self.last_loss_time = current_time
+        
+        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{current_time}\n开仓价格：{self.position.entry_price:.2f}，当前价格：{price:.2f}\n{reason}，本单{'盈利' if profit >= 0 else '亏损'}：{profit:.2f}元"
+        
+        send_message(message, self.config.WECHAT_GROUP)
+        Logger.info(f"平仓 - {direction_text}仓, 价格: {price:.2f}, 盈亏: {profit:.2f}, 原因: {reason}")
+        
+        # 清空持仓
+        self.position.clear()
+        
+        # 清除Redis缓存
+        self._clear_position_from_redis()
+    
+    def _save_position_to_redis(self):
+        """保存持仓到Redis"""
+        try:
+            position_data = {
+                'direction': self.position.direction,
+                'entry_price': self.position.entry_price,
+                'entry_time': self.position.entry_time.isoformat() if self.position.entry_time else None,
+                'current_price': self.position.current_price,
+                'stop_loss_price': self.position.stop_loss_price,
+                'atr_at_entry': self.position.atr_at_entry,
+                'breakeven_level': self.position.breakeven_level
+            }
+            self.redis_client.setex('boll_strategy_position', 3600, json.dumps(position_data))
+        except Exception as e:
+            Logger.error(f"保存持仓到Redis失败: {e}")
+    
+    def _load_position_from_redis(self):
+        """从Redis加载持仓"""
+        try:
+            data = self.redis_client.get('boll_strategy_position')
+            if data:
+                position_data = json.loads(data)
+                self.position.direction = position_data.get('direction', 0)
+                self.position.entry_price = position_data.get('entry_price', 0.0)
+                if position_data.get('entry_time'):
+                    self.position.entry_time = datetime.fromisoformat(position_data['entry_time'])
+                self.position.current_price = position_data.get('current_price', 0.0)
+                self.position.stop_loss_price = position_data.get('stop_loss_price', 0.0)
+                self.position.atr_at_entry = position_data.get('atr_at_entry', 0.0)
+                self.position.breakeven_level = position_data.get('breakeven_level', 0)
+                Logger.info("从Redis恢复持仓信息")
+        except Exception as e:
+            Logger.error(f"从Redis加载持仓失败: {e}")
+    
+    def _clear_position_from_redis(self):
+        """清除Redis中的持仓信息"""
+        try:
+            self.redis_client.delete('boll_strategy_position')
+        except Exception as e:
+            Logger.error(f"清除Redis持仓信息失败: {e}")
+    
+    def fetch_kline_data(self, contract_code):
+        """获取1分钟K线数据用于信号判断"""
+        try:
+            # 获取1分钟K线数据
+            end_time = datetime.now()
+            
+            # 根据当前时间判断需要获取多长时间的数据
+            current_hour = end_time.hour
+            
+            # 如果是早盘开始（9点左右），需要获取昨天夜盘的数据
+            if 9 <= current_hour <= 10:
+                # 获取包括昨天夜盘的数据（约12小时）
+                start_time = end_time - timedelta(hours=12)
+            # 如果是午后或夜盘，获取当天的数据
+            else:
+                # 获取近8小时的数据，确保覆盖完整交易时段
+                start_time = end_time - timedelta(hours=8)
+            
+            Logger.debug(f"获取K线数据: {contract_code}, 时间范围: {start_time.strftime('%Y-%m-%d %H:%M:%S')} - {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # 使用 get_market_data_ex 获取期货数据（文档推荐）
+            data_dict = xtdata.get_market_data_ex(
+                stock_list=[contract_code],
+                period='1m',
+                start_time=start_time.strftime('%Y%m%d%H%M%S'),
+                end_time=end_time.strftime('%Y%m%d%H%M%S'),
+                dividend_type='none'
+            )
+            
+            if data_dict is None or not data_dict:
+                Logger.warning("get_market_data_ex未获取到数据，尝试使用get_market_data")
+                
+                # 尝试使用get_market_data作为备选方案
+                df = xtdata.get_market_data(
+                    stock_list=[contract_code],
+                    period='1m',
+                    start_time=start_time.strftime('%Y%m%d%H%M%S'),
+                    end_time=end_time.strftime('%Y%m%d%H%M%S')
+                )
+                
+                if df is not None and not df.empty:
+                    Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                    
+                    # 重命名列以匹配预期格式
+                    if 'volume' in df.columns:
+                        df = df.rename(columns={'volume': 'vol'})
+                    
+                    # 计算技术指标
+                    df = self.calculate_indicators(df)
+                    
+                    Logger.debug(f"获取到K线数据，行数: {len(df)}, 最新时间: {df.index[-1] if not df.empty else 'N/A'}")
+                    return df
+                else:
+                    Logger.warning("两种方法都未获取到K线数据")
+                    return None
+            
+            # 从字典中提取数据并转换为DataFrame
+            if contract_code in data_dict:
+                market_data = data_dict[contract_code]
+                
+                # 创建DataFrame
+                df = pd.DataFrame({
+                    'time': market_data.get('time', []),
+                    'open': market_data.get('open', []),
+                    'high': market_data.get('high', []),
+                    'low': market_data.get('low', []),
+                    'close': market_data.get('close', []),
+                    'volume': market_data.get('volume', []),
+                    'amount': market_data.get('amount', [])
+                })
+                
+                if df.empty:
+                    Logger.warning("K线数据为空，尝试使用get_market_data")
+                    
+                    # 尝试使用get_market_data作为备选方案
+                    df = xtdata.get_market_data(
+                        stock_list=[contract_code],
+                        period='1m',
+                        start_time=start_time.strftime('%Y%m%d%H%M%S'),
+                        end_time=end_time.strftime('%Y%m%d%H%M%S')
+                    )
+                    
+                    if df is not None and not df.empty:
+                        Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                        
+                        # 重命名列以匹配预期格式
+                        if 'volume' in df.columns:
+                            df = df.rename(columns={'volume': 'vol'})
+                        
+                        # 计算技术指标
+                        df = self.calculate_indicators(df)
+                        return df
+                    else:
+                        return None
+                
+                # 设置时间索引
+                # 处理时间戳，迅投返回的是毫秒时间戳
+                df['time'] = pd.to_datetime(df['time'], unit='ms')
+                
+                # 确保时间是本地时间（北京时间）
+                # 注意：如果时间显示不正确，可能需要调整时区
+                df.set_index('time', inplace=True)
+                
+                # 过滤掉非交易时间的数据
+                df = self.filter_trading_hours(df)
+                
+                # 重命名列
+                df = df.rename(columns={'volume': 'vol'})
+                
+                # 计算技术指标
+                df = self.calculate_indicators(df)
+                
+                if not df.empty:
+                    Logger.debug(f"获取到K线数据，行数: {len(df)}, 最新时间: {df.index[-1].strftime('%Y-%m-%d %H:%M:%S')}")
+                else:
+                    Logger.warning("获取到的K线数据为空")
+                
+                return df
+            else:
+                Logger.warning(f"数据中未找到合约 {contract_code}，尝试使用get_market_data")
+                
+                # 尝试使用get_market_data作为备选方案
+                df = xtdata.get_market_data(
+                    stock_list=[contract_code],
+                    period='1m',
+                    start_time=start_time.strftime('%Y%m%d%H%M%S'),
+                    end_time=end_time.strftime('%Y%m%d%H%M%S')
+                )
+                
+                if df is not None and not df.empty:
+                    Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                    
+                    # 重命名列以匹配预期格式
+                    if 'volume' in df.columns:
+                        df = df.rename(columns={'volume': 'vol'})
+                    
+                    # 计算技术指标
+                    df = self.calculate_indicators(df)
+                    return df
+                else:
+                    return None
+            
+        except Exception as e:
+            Logger.error(f"获取K线数据失败: {e}")
+            import traceback
+            Logger.error(f"错误堆栈: {traceback.format_exc()}")
+            return None
+    
+    def get_current_price(self, contract_code):
+        """获取当前实时价格用于止损监控"""
+        try:
+            # 获取实时tick数据
+            tick_data = xtdata.get_full_tick([contract_code])
+            if tick_data and contract_code in tick_data:
+                current_price = tick_data[contract_code].get('lastPrice', 0)
+                if current_price > 0:
+                    return current_price
+            
+            # 如果tick数据获取失败，尝试获取最新的分钟线收盘价
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=5)
+            
+            df = xtdata.get_market_data(
+                stock_list=[contract_code],
+                period='1m',
+                start_time=start_time.strftime('%Y%m%d%H%M%S'),
+                end_time=end_time.strftime('%Y%m%d%H%M%S')
+            )
+            
+            if df is not None and not df.empty:
+                return df['close'].iloc[-1]
+            
+            return None
+            
+        except Exception as e:
+            Logger.error(f"获取当前价格失败: {e}")
+            return None
+    
+    def check_stop_loss_with_realtime_price(self, contract_code):
+        """使用实时价格检查止损"""
+        if self.position.is_empty():
+            return False, None
+        
+        # 获取实时价格
+        current_price = self.get_current_price(contract_code)
+        if current_price is None:
+            Logger.warning("无法获取实时价格，跳过止损检查")
+            return False, None
+        
+        # 更新持仓当前价格和盈亏
+        self.position.update_current_price(current_price)
+        
+        # 检查硬止损
+        if abs(self.position.profit) >= self.config.HARD_STOP_LOSS:
+            return True, f"硬止损，亏损{self.position.profit:.2f}元"
+        
+        # 检查浮动止损
+        if self.position.stop_loss_price > 0:
+            if ((self.position.is_long() and current_price <= self.position.stop_loss_price) or
+                (self.position.is_short() and current_price >= self.position.stop_loss_price)):
+                return True, f"浮动止损，止损价{self.position.stop_loss_price:.2f}"
+        
+        return False, None
+    
+    def check_signals_with_kline(self, contract_code):
+        """使用K线数据检查开仓和平仓信号"""
+        # 获取1分钟K线数据
+        df = self.fetch_kline_data(contract_code)
+        
+        if df is None:
+            Logger.debug("未获取到K线数据，跳过信号检查")
+            return None
+        
+        if df.empty:
+            Logger.debug("K线数据为空，跳过信号检查")
+            return None
+            
+        # 检查数据是否足够计算指标
+        min_required = max(self.config.BOLL_PERIOD, self.config.ATR_PERIOD)
+        if len(df) < min_required:
+            Logger.debug(f"K线数据不足（当前{len(df)}条，需要至少{min_required}条），跳过信号检查")
+            return None
+        
+        current_time = datetime.now()
+        current_data = df.iloc[-1]
+        current_price = current_data['close']
+        current_atr = current_data.get('ATR', 0)
+        
+        # 如果有持仓，检查平仓信号
+        if not self.position.is_empty():
+            # 更新浮动止盈
+            self.update_trailing_stop(df)
+            
+            # 检查平仓信号
+            close_signal, close_reason = self.check_close_signal(df)
+            if close_signal:
+                self.close_position(current_price, close_reason, current_time)
+                return "close"
+        
+        # 检查开仓信号
+        if self.position.is_empty():
+            can_open, open_reason = self.can_open_position(current_time)
+            if can_open:
+                direction, signal_reason = self.check_open_signal(df)
+                if direction is not None:
+                    self.open_position(direction, current_price, signal_reason, current_time, current_atr)
+                    return "open"
+            else:
+                Logger.debug(f"不允许开仓: {open_reason}")
+        
+        return None
+    
+    def run_strategy_cycle(self, contract_code):
+        """运行一个策略周期"""
+        try:
+            current_time = datetime.now()
+            
+            # 1. 优先检查止损（每次都检查，使用实时价格）
+            if not self.position.is_empty():
+                stop_loss_triggered, stop_reason = self.check_stop_loss_with_realtime_price(contract_code)
+                if stop_loss_triggered:
+                    current_price = self.get_current_price(contract_code)
+                    if current_price:
+                        Logger.info(f"⚠️ 触发止损条件: {stop_reason}")
+                        self.close_position(current_price, stop_reason, current_time)
+                    return
+                else:
+                    # 每30秒输出一次持仓状态
+                    if not hasattr(self, '_last_position_log_time'):
+                        self._last_position_log_time = current_time
+                    
+                    if (current_time - self._last_position_log_time).total_seconds() >= 30:
+                        self._last_position_log_time = current_time
+                        direction_text = "多" if self.position.is_long() else "空"
+                        Logger.debug(f"持仓状态 - 方向: {direction_text}, 开仓价: {self.position.entry_price:.2f}, "
+                                   f"当前价: {self.position.current_price:.2f}, 盈亏: {self.position.profit:.2f}元")
+            
+            # 2. 每分钟检查一次开平仓信号（基于K线收盘价）
+            # 只在新的分钟开始时检查信号，避免频繁检查
+            if not hasattr(self, '_last_signal_check_minute'):
+                self._last_signal_check_minute = current_time.minute
+                self._last_signal_check_time = current_time
+            
+            if current_time.minute != self._last_signal_check_minute:
+                self._last_signal_check_minute = current_time.minute
+                self._last_signal_check_time = current_time
+                
+                Logger.debug(f"执行信号检查 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                signal_result = self.check_signals_with_kline(contract_code)
+                
+                if signal_result == "open":
+                    Logger.info(f"新开仓位")
+                elif signal_result == "close":
+                    Logger.info(f"平仓完成")
+                else:
+                    Logger.debug(f"无交易信号")
+            
+        except Exception as e:
+            Logger.error(f"策略执行异常: {e}")
+            import traceback
+            Logger.error(f"异常堆栈: {traceback.format_exc()}")
+    
+    def download_history_data(self, contract_code):
+        """下载历史数据"""
+        try:
+            Logger.info(f"开始下载历史数据: {contract_code}")
+            
+            # 获取最近的交易日
+            current_time = datetime.now()
+            
+            # 如果是周末，往前推到周五
+            while current_time.weekday() >= 5:  # 5是周六，6是周日
+                current_time = current_time - timedelta(days=1)
+            
+            # 设置结束时间为当前交易日
+            end_date = current_time.strftime('%Y%m%d')
+            
+            # 设置开始时间为30个交易日前
+            start_date = (current_time - timedelta(days=45)).strftime('%Y%m%d')  # 45天确保包含30个交易日
+            
+            Logger.info(f"下载历史数据时间范围: {start_date} - {end_date}")
+            
+            # 下载1分钟K线历史数据
+            result = xtdata.download_history_data(
+                stock_code=contract_code,
+                period='1m',
+                start_time=start_date,
+                end_time=end_date
+            )
+            
+            Logger.info(f"1分钟K线数据下载完成: {contract_code}")
+            
+            # 下载tick数据（当天）
+            tick_result = xtdata.download_history_data(
+                stock_code=contract_code,
+                period='tick',
+                start_time=end_date,
+                end_time=''
+            )
+            Logger.info(f"Tick数据下载完成: {contract_code}")
+            
+            return True
+            
+        except Exception as e:
+            Logger.error(f"下载历史数据失败: {e}")
+            import traceback
+            Logger.error(f"错误堆栈: {traceback.format_exc()}")
+            return False
+    
+    def subscribe_contract(self, contract_code):
+        """订阅合约行情"""
+        try:
+            # 先下载历史数据
+            if not self.download_history_data(contract_code):
+                Logger.warning(f"历史数据下载失败，但继续订阅: {contract_code}")
+            
+            # 等待数据下载完成
+            time.sleep(2)
+            
+            # 订阅tick数据
+            xtdata.subscribe_quote(contract_code, period='tick', count=-1)
+            Logger.info(f"已订阅tick数据: {contract_code}")
+            
+            # 订阅1分钟K线数据
+            xtdata.subscribe_quote(contract_code, period='1m', count=-1)
+            Logger.info(f"已订阅1分钟K线数据: {contract_code}")
+            
+            # 测试数据是否可用
+            test_data = self.fetch_kline_data(contract_code)
+            if test_data is not None and not test_data.empty:
+                Logger.info(f"✅ 数据订阅成功，获取到 {len(test_data)} 条K线数据")
+            else:
+                Logger.warning(f"⚠️ 数据订阅后暂时无法获取数据，可能需要等待")
+            
+            return True
+        except Exception as e:
+            Logger.error(f"订阅合约{contract_code}失败: {e}")
+            import traceback
+            Logger.error(f"错误堆栈: {traceback.format_exc()}")
+            return False
+    
+    def start(self):
+        """启动策略"""
+        self.is_running = True
+        
+        # 从Redis恢复持仓信息
+        self._load_position_from_redis()
+        
+        # 获取主力合约
+        contract_code = self.get_main_contract()
+        if not contract_code:
+            Logger.error("无法获取主力合约，策略退出")
+            return
+        
+        # 订阅合约行情
+        if not self.subscribe_contract(contract_code):
+            Logger.error("订阅合约行情失败，策略退出")
+            return
+        
+        # 等待数据推送稳定
+        Logger.info("等待数据推送稳定...")
+        time.sleep(3)
+        
+        Logger.info(f"布林线策略启动 - 合约: {contract_code}")
+        
+        try:
+            while self.is_running:
+                self.run_strategy_cycle(contract_code)
+                time.sleep(self.config.DATA_INTERVAL)
+                
+        except KeyboardInterrupt:
+            Logger.info("接收到中断信号，策略停止")
+        except Exception as e:
+            Logger.error(f"策略运行异常: {e}")
+        finally:
+            self.stop()
+    
+    def stop(self):
+        """停止策略"""
+        self.is_running = False
+        Logger.info("布林线策略已停止")
+
+
+def main():
+    """主函数"""
+    strategy = BollStrategy()
+    
+    try:
+        strategy.start()
+    except Exception as e:
+        Logger.error(f"策略启动失败: {e}")
+    finally:
+        strategy.stop()
+
+
+if __name__ == "__main__":
+    main()

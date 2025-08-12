@@ -26,6 +26,7 @@ def emergency_cleanup():
     print(f"  锁详细信息: {get_wechat_lock_info()}")
     
     # 显示统计信息
+
     stats = get_wechat_lock_stats()
     print(f"\n📈 统计信息:")
     for key, value in stats.items():

@@ -8,12 +8,9 @@ from tenacity import sleep
 
 from utils.date_utils import DateUtils
 from utils.wechat import send_message
+from utils.logger_utils import Logger
 
 from utils.tushare_helper import TushareHelper
-
-# 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("NewsBroadcaster")
 
 # 定义所有可能的新闻源
 available_sources = ['sina', 'wallstreetcn', '10jqka', 'eastmoney', 'yuncaijing', 'fenghuang',
@@ -28,18 +25,18 @@ def broadcast_news_task():
     """
     实际执行新闻获取和播报的任务。
     """
-    logger.info("正在获取新闻...")
+    Logger.info("正在获取新闻...")
     try:
         end_time = datetime.now()
         start_time = end_time - timedelta(minutes=Minutes)
 
         # 随机选择 5 个新闻源
         selected_sources = random.sample(available_sources, 5)
-        logger.info(f"本次播报选择的新闻源: {selected_sources}")
+        Logger.info(f"本次播报选择的新闻源: {selected_sources}")
 
         # 为每个选定的新闻源获取新闻并发送到对应的群组
         for src, group in zip(selected_sources, target_groups):
-            logger.info(f"正在从 {src} 获取新闻并发送到 {group}...")
+            Logger.info(f"正在从 {src} 获取新闻并发送到 {group}...")
             news_df = TushareHelper.live_news(start_date=start_time, end_date=end_time, src=src)
             time.sleep(10)
 
@@ -76,21 +73,21 @@ def broadcast_news_task():
                     send_message(broadcast_message, group)
                     # 在发送给不同群之间稍作延迟
                 else:
-                    logger.info(f"从 {src} 未获取到新闻标题。")
+                    Logger.info(f"从 {src} 未获取到新闻标题。")
             else:
-                logger.info(f"从 {src} 未获取到新闻或新闻列表为空。")
+                Logger.info(f"从 {src} 未获取到新闻或新闻列表为空。")
 
     except Exception as e:
-        logger.error(f"获取或播报新闻时发生错误: {e}")
+        Logger.error(f"获取或播报新闻时发生错误: {e}")
 
 # 统一调度器调用的函数
 def run_live_news():
     """实时新闻播报任务 - 由统一调度器调用"""
 
-    logger.info("实时新闻播报任务开始执行...")
+    Logger.info("实时新闻播报任务开始执行...")
     sleep(30)
     broadcast_news_task()
-    logger.info("实时新闻播报任务执行完毕。")
+    Logger.info("实时新闻播报任务执行完毕。")
 
     Timer(60 * Minutes, run_live_news).start()
 
