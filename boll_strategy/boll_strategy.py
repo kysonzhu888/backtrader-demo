@@ -61,9 +61,18 @@ class BollStrategyConfig:
     HARD_STOP_LOSS = 380  # 硬止损金额（元）
     HARD_STOP_LOSS_POINTS = HARD_STOP_LOSS / CONTRACT_MULTIPLIER  # 转换为点数
     
-    # 开仓保护时间
-    NO_OPEN_MINUTES_AFTER_OPEN = 15  # 开盘后不开仓时间（分钟）
-    NO_OPEN_MINUTES_BEFORE_CLOSE = 15  # 收盘前不开仓时间（分钟）
+    # 开仓保护时间（可根据需要调整，设为0可关闭对应保护）
+    # 开盘后保护
+    NO_OPEN_MINUTES_AFTER_MORNING_OPEN = 15  # 早盘09:00开盘后不开仓时间（分钟）
+    NO_OPEN_MINUTES_AFTER_NIGHT_OPEN = 15  # 夜盘21:00开盘后不开仓时间（分钟）
+    
+    # 收盘前保护
+    NO_OPEN_MINUTES_BEFORE_MORNING_BREAK = 1  # 早盘10:15休市前不开仓时间（分钟），设为1分钟
+    NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE = 15  # 早盘11:30收盘前不开仓时间（分钟）
+    NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE = 15  # 午盘15:00收盘前不开仓时间（分钟）
+    NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE = 15  # 夜盘23:00收盘前不开仓时间（分钟）
+    
+    # 止损后保护
     NO_OPEN_MINUTES_AFTER_LOSS = 30  # 止损后不开仓时间（分钟）
     
     # 微信播报
@@ -391,17 +400,43 @@ class BollStrategy:
         # 构造时间值用于比较
         time_val = current_hour * 100 + current_minute
         
-        # 开盘后15分钟保护
-        if (900 <= time_val < 915) or \
-           (2100 <= time_val < 2115):
-            return False, "开盘后15分钟保护期"
+        # 开盘后保护（可通过配置关闭）
+        # 早盘09:00开盘后保护
+        if self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN > 0:
+            if 900 <= time_val < (900 + self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN):
+                minutes_left = 900 + self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN - time_val
+                return False, f"早盘开盘后保护期，剩余{minutes_left}分钟"
         
-        # 收盘前15分钟保护
-        if (1000 <= time_val <= 1015) or \
-           (1115 <= time_val <= 1130) or \
-           (1445 <= time_val <= 1500) or \
-           (2245 <= time_val <= 2300):
-            return False, "收盘前15分钟保护期"
+        # 夜盘21:00开盘后保护
+        if self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN > 0:
+            if 2100 <= time_val < (2100 + self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN):
+                minutes_left = 2100 + self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN - time_val
+                return False, f"夜盘开盘后保护期，剩余{minutes_left}分钟"
+        
+        # 收盘前保护（可通过配置关闭）
+        # 早盘10:15休市前保护（短时间保护）
+        if self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK > 0:
+            start_time = 1015 - self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK
+            if start_time <= time_val <= 1015:
+                return False, f"早盘休市前{self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK}分钟保护期"
+        
+        # 早盘11:30收盘前保护
+        if self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE > 0:
+            start_time = 1130 - self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE
+            if start_time <= time_val <= 1130:
+                return False, f"早盘收盘前{self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE}分钟保护期"
+        
+        # 午盘15:00收盘前保护
+        if self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE > 0:
+            start_time = 1500 - self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE
+            if start_time <= time_val <= 1500:
+                return False, f"午盘收盘前{self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE}分钟保护期"
+        
+        # 夜盘23:00收盘前保护
+        if self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE > 0:
+            start_time = 2300 - self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE
+            if start_time <= time_val <= 2300:
+                return False, f"夜盘收盘前{self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE}分钟保护期"
         
         return True, "允许开仓"
     
@@ -1047,10 +1082,21 @@ class BollStrategy:
         # 策略启动通知
         Logger.info("="*50)
         Logger.info("🚀 布林线策略正在启动...")
-        Logger.info(f"策略版本: V2.2")
+        Logger.info(f"策略版本: V2.3")
         Logger.info(f"交易品种: {self.config.PRODUCT_NAME}({self.config.PRODUCT_TYPE})")
         Logger.info(f"布林线参数: {self.config.BOLL_PERIOD}周期, {self.config.BOLL_STD}倍标准差")
         Logger.info(f"风控参数: 硬止损{self.config.HARD_STOP_LOSS}元, ATR倍数{self.config.ATR_MULTIPLIER_FOR_PROFIT}")
+        
+        # 输出保护期配置
+        Logger.info("保护期设置:")
+        Logger.info(f"  - 早盘开盘后: {self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN}分钟")
+        Logger.info(f"  - 夜盘开盘后: {self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN}分钟")
+        Logger.info(f"  - 早盘休市前: {self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK}分钟")
+        Logger.info(f"  - 早盘收盘前: {self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE}分钟")
+        Logger.info(f"  - 午盘收盘前: {self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE}分钟")
+        Logger.info(f"  - 夜盘收盘前: {self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE}分钟")
+        Logger.info(f"  - 止损后: {self.config.NO_OPEN_MINUTES_AFTER_LOSS}分钟")
+        Logger.info("（提示：将任意保护时间设为0可关闭对应保护）")
         Logger.info("="*50)
         
         # 发送启动通知到"老公老婆"群
