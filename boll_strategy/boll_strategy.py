@@ -424,26 +424,31 @@ class BollStrategy:
         # 收盘前保护（可通过配置关闭）
         # 早盘10:15休市前保护（短时间保护）
         if self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK > 0:
-            start_time = 1015 - self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK
-            if start_time <= time_val <= 1015:
+            # 10:15 = 10*60+15 = 615分钟，减去保护时间
+            protection_start = datetime(current_time.year, current_time.month, current_time.day, 10, 15) - timedelta(minutes=self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK)
+            protection_start_val = protection_start.hour * 100 + protection_start.minute
+            if protection_start_val <= time_val <= 1015:
                 return False, f"早盘休市前{self.config.NO_OPEN_MINUTES_BEFORE_MORNING_BREAK}分钟保护期"
         
         # 早盘11:30收盘前保护
         if self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE > 0:
-            start_time = 1130 - self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE
-            if start_time <= time_val <= 1130:
+            protection_start = datetime(current_time.year, current_time.month, current_time.day, 11, 30) - timedelta(minutes=self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE)
+            protection_start_val = protection_start.hour * 100 + protection_start.minute
+            if protection_start_val <= time_val <= 1130:
                 return False, f"早盘收盘前{self.config.NO_OPEN_MINUTES_BEFORE_MORNING_CLOSE}分钟保护期"
         
         # 午盘15:00收盘前保护
         if self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE > 0:
-            start_time = 1500 - self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE
-            if start_time <= time_val <= 1500:
+            protection_start = datetime(current_time.year, current_time.month, current_time.day, 15, 0) - timedelta(minutes=self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE)
+            protection_start_val = protection_start.hour * 100 + protection_start.minute
+            if protection_start_val <= time_val <= 1500:
                 return False, f"午盘收盘前{self.config.NO_OPEN_MINUTES_BEFORE_AFTERNOON_CLOSE}分钟保护期"
         
         # 夜盘23:00收盘前保护
         if self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE > 0:
-            start_time = 2300 - self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE
-            if start_time <= time_val <= 2300:
+            protection_start = datetime(current_time.year, current_time.month, current_time.day, 23, 0) - timedelta(minutes=self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE)
+            protection_start_val = protection_start.hour * 100 + protection_start.minute
+            if protection_start_val <= time_val <= 2300:
                 return False, f"夜盘收盘前{self.config.NO_OPEN_MINUTES_BEFORE_NIGHT_CLOSE}分钟保护期"
         
         return True, "允许开仓"
