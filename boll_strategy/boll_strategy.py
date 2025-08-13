@@ -533,6 +533,9 @@ class BollStrategy:
             message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n开仓价格：{self.position.entry_price:.2f}，ATR：{current_atr:.2f}，当前价格：{current['close']:.2f}\n盈利超过 2 个ATR，推保本，恭喜这单不会亏钱了。"
             send_message(message, self.config.WECHAT_GROUP)
             Logger.info(f"推保本 - {message}")
+            
+            # 保存到Redis
+            self._save_position_to_redis()
         
         # 每盈利2个ATR，止盈推进1个ATR
         elif self.position.profit > atr_threshold * (self.position.breakeven_level + 1):
@@ -545,6 +548,9 @@ class BollStrategy:
                 self.position.stop_loss_price = self.position.entry_price - atr_move * (self.position.breakeven_level - 1)
             
             Logger.info(f"浮动止盈更新 - 级别: {self.position.breakeven_level}, 止损价: {self.position.stop_loss_price:.2f}")
+            
+            # 保存到Redis
+            self._save_position_to_redis()
     
     def open_position(self, direction, price, reason, current_time, atr_value, current_data=None):
         """开仓"""
@@ -641,7 +647,8 @@ class BollStrategy:
                 'atr_at_entry': self.position.atr_at_entry,
                 'breakeven_level': self.position.breakeven_level
             }
-            self.redis_client.setex('boll_strategy_position', 3600, json.dumps(position_data))
+            # 保存时间设为24小时，确保隔夜后也能恢复
+            self.redis_client.setex('boll_strategy_position', 86400, json.dumps(position_data))
         except Exception as e:
             Logger.error(f"保存持仓到Redis失败: {e}")
     
@@ -659,7 +666,38 @@ class BollStrategy:
                 self.position.stop_loss_price = position_data.get('stop_loss_price', 0.0)
                 self.position.atr_at_entry = position_data.get('atr_at_entry', 0.0)
                 self.position.breakeven_level = position_data.get('breakeven_level', 0)
-                Logger.info("从Redis恢复持仓信息")
+                
+                # 如果恢复了持仓，输出详细信息
+                if self.position.direction != 0:
+                    direction_text = "多" if self.position.direction == 1 else "空"
+                    Logger.info("="*50)
+                    Logger.info("🔄 从Redis恢复持仓信息：")
+                    Logger.info(f"  方向: {direction_text}")
+                    Logger.info(f"  开仓价格: {self.position.entry_price:.2f}")
+                    Logger.info(f"  当前价格: {self.position.current_price:.2f}")
+                    Logger.info(f"  止损价格: {self.position.stop_loss_price:.2f}")
+                    Logger.info(f"  保本级别: {self.position.breakeven_level}")
+                    Logger.info(f"  ATR: {self.position.atr_at_entry:.2f}")
+                    if self.position.entry_time:
+                        Logger.info(f"  开仓时间: {self.position.entry_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    Logger.info("="*50)
+                    
+                    # 发送恢复通知到微信
+                    recovery_msg = (
+                        f"【策略恢复通知】\n"
+                        f"布林线策略重启成功\n"
+                        f"检测到未平仓的{direction_text}单\n"
+                        f"开仓价格：{self.position.entry_price:.2f}\n"
+                        f"当前止损价：{self.position.stop_loss_price:.2f if self.position.stop_loss_price > 0 else '无'}\n"
+                        f"保本状态：{'已保本' if self.position.breakeven_level > 0 else '未保本'}\n"
+                        f"继续监控中..."
+                    )
+                    try:
+                        send_message(recovery_msg, self.config.WECHAT_GROUP)
+                    except Exception as e:
+                        Logger.warning(f"发送恢复通知失败: {e}")
+                else:
+                    Logger.info("从Redis加载配置，无持仓")
         except Exception as e:
             Logger.error(f"从Redis加载持仓失败: {e}")
     
@@ -1031,6 +1069,9 @@ class BollStrategy:
                         direction_text = "多" if self.position.is_long() else "空"
                         Logger.info(f"📊 持仓状态 - 方向: {direction_text}, 开仓价: {self.position.entry_price:.2f}, "
                                    f"当前价: {self.position.current_price:.2f}, 盈亏: {self.position.profit:.2f}元")
+                        
+                        # 定期更新Redis中的持仓信息
+                        self._save_position_to_redis()
             
             # 3. 每分钟检查一次开平仓信号（基于K线收盘价）
             # 只在新的分钟开始时检查信号，避免频繁检查
