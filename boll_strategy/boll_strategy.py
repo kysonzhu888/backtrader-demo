@@ -75,6 +75,12 @@ class BollStrategyConfig:
     # 止损后保护
     NO_OPEN_MINUTES_AFTER_LOSS = 30  # 止损后不开仓时间（分钟）
     
+    # 强制平仓时间（收盘前强平，避免跳空风险）
+    FORCE_CLOSE_TIMES = [
+        (14, 58),  # 白天收盘前2分钟
+        (22, 58),  # 晚上收盘前2分钟
+    ]
+    
     # 微信播报
     WECHAT_GROUP = "动力波策略群"
 
@@ -295,6 +301,7 @@ class BollStrategy:
             upper = latest_data.get('UPPER', 0)
             middle = latest_data.get('MIDDLE', 0)
             lower = latest_data.get('LOWER', 0)
+            atr = latest_data.get('ATR', 0)
             
             # 计算收盘价在布林线中的位置
             position_pct = 0
@@ -307,6 +314,7 @@ class BollStrategy:
             Logger.info(f"📈 当前走势 - 开:{open_price:.2f} 高:{high:.2f} 低:{low:.2f} 收:{close:.2f} ({color})")
             Logger.info(f"📍 布林线位置 - 上轨:{upper:.2f} 中轨:{middle:.2f} 下轨:{lower:.2f}")
             Logger.info(f"📊 相对位置: {position_pct:.1f}% (0%=下轨, 50%=中轨, 100%=上轨)")
+            Logger.info(f"🔄 ATR: {atr:.2f}")
             
             # 判断当前位置状态
             if close > upper:
@@ -538,7 +546,7 @@ class BollStrategy:
             
             Logger.info(f"浮动止盈更新 - 级别: {self.position.breakeven_level}, 止损价: {self.position.stop_loss_price:.2f}")
     
-    def open_position(self, direction, price, reason, current_time, atr_value):
+    def open_position(self, direction, price, reason, current_time, atr_value, current_data=None):
         """开仓"""
         self.position.direction = direction
         self.position.entry_price = price
@@ -550,7 +558,28 @@ class BollStrategy:
         
         # 格式化时间，去掉微秒
         time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
-        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n{reason}\n满足开仓条件，开仓方向：{direction_text}\n开仓价格：{price:.2f}"
+        
+        # 构建播报消息（根据需求文档的格式）
+        message_lines = [
+            "【布林线策略信号播报】",
+            f"品种：{self.config.PRODUCT_NAME}（{self.config.PRODUCT_TYPE}）  周期：{self.config.KLINE_PERIOD}  时间：{time_str}"
+        ]
+        
+        # 添加布林线信息
+        if current_data is not None:
+            upper = current_data.get('UPPER', 0)
+            lower = current_data.get('LOWER', 0)
+            if direction == 1:  # 做多
+                message_lines.append(f"上轨：{upper:.2f}，当前价格：{price:.2f}，突破上轨：满足")
+            else:  # 做空
+                message_lines.append(f"下轨：{lower:.2f}，当前价格：{price:.2f}，突破下轨：满足")
+        else:
+            message_lines.append(reason)
+        
+        message_lines.append(f"满足开仓条件，开仓方向：{direction_text}")
+        message_lines.append(f"开仓价格：{price:.2f}")
+        
+        message = "\n".join(message_lines)
         
         send_message(message, self.config.WECHAT_GROUP)
         Logger.info(f"开仓 - 方向: {direction_text}, 价格: {price:.2f}, 原因: {reason}")
@@ -581,7 +610,15 @@ class BollStrategy:
         else:
             profit_desc = f"亏损{abs(profit):.2f}元"
         
-        message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n开仓价格：{self.position.entry_price:.2f}，当前价格：{price:.2f}\n{reason}，本单{profit_desc}"
+        # 构建平仓消息
+        message_lines = [
+            "【布林线策略信号播报】",
+            f"品种：{self.config.PRODUCT_NAME}（{self.config.PRODUCT_TYPE}）  周期：{self.config.KLINE_PERIOD}  时间：{time_str}",
+            f"开仓价格：{self.position.entry_price:.2f}，当前价格：{price:.2f}，方向：{direction_text}",
+            f"{reason}，本单{profit_desc}。"
+        ]
+        
+        message = "\n".join(message_lines)
         
         send_message(message, self.config.WECHAT_GROUP)
         Logger.info(f"平仓 - {direction_text}仓, 价格: {price:.2f}, 盈亏: {profit:.2f}, 原因: {reason}")
@@ -868,6 +905,21 @@ class BollStrategy:
             Logger.error(f"获取当前价格失败: {e}")
             return None
     
+    def check_force_close(self, current_time):
+        """检查是否需要强制平仓（收盘前）"""
+        if self.position.is_empty():
+            return False, None
+        
+        current_hour = current_time.hour
+        current_minute = current_time.minute
+        
+        # 检查是否到了强制平仓时间
+        for force_hour, force_minute in self.config.FORCE_CLOSE_TIMES:
+            if current_hour == force_hour and current_minute == force_minute:
+                return True, "快收盘啦！强制平仓了"
+        
+        return False, None
+    
     def check_stop_loss_with_realtime_price(self, contract_code):
         """使用实时价格检查止损"""
         if self.position.is_empty():
@@ -939,7 +991,7 @@ class BollStrategy:
             if can_open:
                 direction, signal_reason = self.check_open_signal(df)
                 if direction is not None:
-                    self.open_position(direction, current_price, signal_reason, current_time, current_atr)
+                    self.open_position(direction, current_price, signal_reason, current_time, current_atr, current_data)
                     return "open"
             else:
                 Logger.debug(f"不允许开仓: {open_reason}")
@@ -951,7 +1003,16 @@ class BollStrategy:
         try:
             current_time = datetime.now()
             
-            # 1. 优先检查止损（每次都检查，使用实时价格）
+            # 1. 首先检查是否需要强制平仓（收盘前）
+            if not self.position.is_empty():
+                force_close, force_reason = self.check_force_close(current_time)
+                if force_close:
+                    current_price = self.get_current_price(contract_code)
+                    if current_price:
+                        self.close_position(current_price, force_reason, current_time)
+                    return
+            
+            # 2. 检查止损（每次都检查，使用实时价格）
             if not self.position.is_empty():
                 stop_loss_triggered, stop_reason = self.check_stop_loss_with_realtime_price(contract_code)
                 if stop_loss_triggered:
@@ -971,7 +1032,7 @@ class BollStrategy:
                         Logger.info(f"📊 持仓状态 - 方向: {direction_text}, 开仓价: {self.position.entry_price:.2f}, "
                                    f"当前价: {self.position.current_price:.2f}, 盈亏: {self.position.profit:.2f}元")
             
-            # 2. 每分钟检查一次开平仓信号（基于K线收盘价）
+            # 3. 每分钟检查一次开平仓信号（基于K线收盘价）
             # 只在新的分钟开始时检查信号，避免频繁检查
             if not hasattr(self, '_last_signal_check_minute'):
                 self._last_signal_check_minute = current_time.minute
@@ -985,9 +1046,9 @@ class BollStrategy:
                 signal_result = self.check_signals_with_kline(contract_code)
                 
                 if signal_result == "open":
-                    Logger.info(f"📢 新开仓位")
+                    Logger.info(f"📢 新开仓位成功")
                 elif signal_result == "close":
-                    Logger.info(f"📤 平仓完成")
+                    Logger.info(f"📤 平仓执行完成")
                 else:
                     Logger.debug(f"无交易信号")
             
