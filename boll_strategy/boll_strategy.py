@@ -1074,10 +1074,96 @@ class BollStrategy:
         
         return None
     
+    def get_next_trading_time(self, current_time):
+        """获取下一个交易时间段的开始时间"""
+        # 菜籽油交易时间：
+        # 周一至周五：
+        # 日盘: 09:00-10:15, 10:30-11:30, 13:30-15:00
+        # 夜盘: 21:00-23:00 （包括周五晚上）
+        
+        # 周末不交易
+        weekday = current_time.weekday()
+        if weekday == 5:  # 周六
+            # 跳到下周一早盘
+            next_monday = current_time + timedelta(days=2)
+            return next_monday.replace(hour=8, minute=55, second=0, microsecond=0)
+        elif weekday == 6:  # 周日  
+            # 跳到周一早盘
+            next_monday = current_time + timedelta(days=1)
+            return next_monday.replace(hour=8, minute=55, second=0, microsecond=0)
+        
+        hour = current_time.hour
+        minute = current_time.minute
+        time_val = hour * 100 + minute
+        
+        # 如果在交易时间内，返回None
+        if ((900 <= time_val < 1015) or
+            (1030 <= time_val < 1130) or
+            (1330 <= time_val < 1500) or
+            (2100 <= time_val < 2300)):
+            return None
+            
+        # 计算下一个交易时间段
+        if time_val < 900:
+            # 早上9点前，等待早盘
+            next_time = current_time.replace(hour=8, minute=55, second=0, microsecond=0)
+            if next_time < current_time:
+                next_time += timedelta(days=1)
+            return next_time
+        elif 1015 <= time_val < 1030:
+            # 早盘休息，等待10:30
+            return current_time.replace(hour=10, minute=25, second=0, microsecond=0)
+        elif 1130 <= time_val < 1330:
+            # 午休，等待午盘
+            return current_time.replace(hour=13, minute=25, second=0, microsecond=0)
+        elif 1500 <= time_val < 2100:
+            # 下午收盘后，等待夜盘（周一至周五都有夜盘）
+            return current_time.replace(hour=20, minute=55, second=0, microsecond=0)
+        else:
+            # 23:00之后，等待下一个交易日早盘
+            # 如果是周五晚上23:00后，跳到周一
+            if weekday == 4:  # 周五
+                next_monday = current_time + timedelta(days=3)
+                return next_monday.replace(hour=8, minute=55, second=0, microsecond=0)
+            else:
+                # 其他时间，等待明天早盘
+                next_day = current_time + timedelta(days=1)
+                return next_day.replace(hour=8, minute=55, second=0, microsecond=0)
+    
     def run_strategy_cycle(self, contract_code):
         """运行一个策略周期"""
         try:
             current_time = datetime.now()
+            
+            # 检查是否在交易时间
+            next_trading_time = self.get_next_trading_time(current_time)
+            if next_trading_time:
+                # 非交易时间，计算休眠时间
+                sleep_seconds = (next_trading_time - current_time).total_seconds()
+                if sleep_seconds > 0:
+                    # 只在首次进入休眠时输出日志
+                    if not hasattr(self, '_sleeping') or not self._sleeping:
+                        self._sleeping = True
+                        Logger.info("="*50)
+                        Logger.info(f"😴 非交易时间，策略进入休眠")
+                        Logger.info(f"当前时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        Logger.info(f"下次启动: {next_trading_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        Logger.info(f"休眠时长: {sleep_seconds/3600:.1f}小时")
+                        Logger.info("="*50)
+                    # 休眠时间较长时，每30分钟检查一次
+                    if sleep_seconds > 1800:
+                        time.sleep(1800)  # 睡眠30分钟
+                    else:
+                        time.sleep(max(60, sleep_seconds))  # 至少睡眠1分钟
+                    return
+            else:
+                # 在交易时间内，如果之前在休眠，输出唤醒日志
+                if hasattr(self, '_sleeping') and self._sleeping:
+                    self._sleeping = False
+                    Logger.info("="*50)
+                    Logger.info(f"🌟 交易时间开始，策略唤醒")
+                    Logger.info(f"当前时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    Logger.info("="*50)
             
             # 1. 首先检查是否需要强制平仓（收盘前）
             if not self.position.is_empty():
@@ -1265,11 +1351,23 @@ class BollStrategy:
         time.sleep(3)
         
         Logger.info(f"✅ 布林线策略启动成功 - 合约: {contract_code}")
+        
+        # 检查当前是否交易时间
+        current_time = datetime.now()
+        next_trading_time = self.get_next_trading_time(current_time)
+        if next_trading_time:
+            Logger.info(f"⚠️ 当前为非交易时间，将在{next_trading_time.strftime('%H:%M')}唤醒")
+        else:
+            Logger.info("✅ 当前为交易时间，开始监控")
+        
         Logger.info("="*50)
         
         try:
             while self.is_running:
                 self.run_strategy_cycle(contract_code)
+                # 如果在休眠状态，不需要频繁循环
+                if hasattr(self, '_sleeping') and self._sleeping:
+                    continue
                 time.sleep(self.config.DATA_INTERVAL)
                 
         except KeyboardInterrupt:
