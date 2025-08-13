@@ -180,7 +180,9 @@ class BollStrategy:
         try:
             # 使用迅投市场代码ZF获取郑商所合约列表
             Logger.info("="*50)
-            Logger.info("开始获取郑商所合约列表...")
+            Logger.info("📋 开始获取主力合约...")
+            Logger.info(f"品种: {self.config.PRODUCT_NAME}({self.config.PRODUCT_TYPE})")
+            
             codes = xtdata.get_stock_list_in_sector("ZF")
             Logger.info(f"获取到郑商所合约总数: {len(codes)}个")
             
@@ -213,7 +215,7 @@ class BollStrategy:
             
             # 输出期货合约列表
             if oi_futures:
-                Logger.info(f"期货合约列表: {', '.join(oi_futures[:10])}等")  # 只显示前10个
+                Logger.info(f"期货合约代码: {', '.join(sorted(oi_futures)[:5])}...")  # 显示前5个
             
             if not oi_futures:
                 Logger.error("未找到菜籽油期货合约")
@@ -244,13 +246,14 @@ class BollStrategy:
             # 输出成交量排名
             if contract_volumes:
                 sorted_contracts = sorted(contract_volumes.items(), key=lambda x: x[1], reverse=True)
-                Logger.info("合约成交量排名(前5):")
-                for i, (contract, volume) in enumerate(sorted_contracts[:5], 1):
-                    Logger.info(f"  {i}. {contract}: 成交量={volume}")
+                Logger.info("📊 合约成交量排名:")
+                for i, (contract, volume) in enumerate(sorted_contracts[:3], 1):
+                    Logger.info(f"  第{i}名: {contract} 成交量={volume:,}")
             
             if main_contract:
-                Logger.info(f"✅ 最终选择主力合约: {main_contract} (成交量: {max_volume})")
+                Logger.info(f"✅ 选定主力合约: {main_contract} (成交量: {max_volume:,})")
                 Logger.info("="*50)
+                self.main_contract = main_contract
                 return main_contract
             else:
                 # 如果无法获取成交量，根据月份选择（通常选择最近的活跃月份）
@@ -521,9 +524,13 @@ class BollStrategy:
         
         if current_atr <= 0:
             current_atr = self.position.atr_at_entry
+            
+        # ATR以点数计算，转换为金额
+        atr_points = current_atr
+        atr_money = atr_points * self.config.CONTRACT_MULTIPLIER
         
         # 盈利超过2个ATR后开始推保本
-        atr_threshold = self.config.ATR_MULTIPLIER_FOR_PROFIT * current_atr * self.config.CONTRACT_MULTIPLIER
+        atr_threshold = self.config.ATR_MULTIPLIER_FOR_PROFIT * atr_money
         
         if self.position.profit > atr_threshold and self.position.breakeven_level == 0:
             # 推保本
@@ -535,9 +542,9 @@ class BollStrategy:
             
             # 格式化时间，去掉微秒
             time_str = current.name.strftime('%Y-%m-%d %H:%M:%S') if hasattr(current.name, 'strftime') else str(current.name)
-            message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n开仓价格：{self.position.entry_price:.2f}，ATR：{current_atr:.2f}，当前价格：{current['close']:.2f}\n盈利超过 2 个ATR，推保本，恭喜这单不会亏钱了。"
+            message = f"【布林线策略信号播报】\n品种：{self.config.PRODUCT_NAME}  周期：{self.config.KLINE_PERIOD}  时间：{time_str}\n开仓价格：{self.position.entry_price:.2f}，ATR：{atr_points:.2f}，当前价格：{current['close']:.2f}\n盈利超过 2 个ATR，推保本，恭喜这单不会亏钱了。"
             send_message(message, self.config.WECHAT_GROUP)
-            Logger.info(f"推保本 - {message}")
+            Logger.info(f"✋ 推保本 - 盈利{self.position.profit:.2f}元 > {atr_threshold:.2f}元(2个ATR)")
             
             # 保存到Redis
             self._save_position_to_redis()
@@ -545,14 +552,13 @@ class BollStrategy:
         # 每盈利2个ATR，止盈推进1个ATR
         elif self.position.profit > atr_threshold * (self.position.breakeven_level + 1):
             self.position.breakeven_level += 1
-            atr_move = current_atr
             
             if self.position.is_long():
-                self.position.stop_loss_price = self.position.entry_price + atr_move * (self.position.breakeven_level - 1)
+                self.position.stop_loss_price = self.position.entry_price + atr_points * (self.position.breakeven_level - 1)
             else:
-                self.position.stop_loss_price = self.position.entry_price - atr_move * (self.position.breakeven_level - 1)
+                self.position.stop_loss_price = self.position.entry_price - atr_points * (self.position.breakeven_level - 1)
             
-            Logger.info(f"浮动止盈更新 - 级别: {self.position.breakeven_level}, 止损价: {self.position.stop_loss_price:.2f}")
+            Logger.info(f"📈 浮动止盈更新 - 级别: {self.position.breakeven_level}, 止损价: {self.position.stop_loss_price:.2f}, 盈利: {self.position.profit:.2f}元")
             
             # 保存到Redis
             self._save_position_to_redis()
@@ -573,7 +579,7 @@ class BollStrategy:
         # 构建播报消息（根据需求文档的格式）
         message_lines = [
             "【布林线策略信号播报】",
-            f"品种：{self.config.PRODUCT_NAME}（{self.config.PRODUCT_TYPE}）  周期：{self.config.KLINE_PERIOD}  时间：{time_str}"
+            f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 周期：{self.config.KLINE_PERIOD} 时间：{time_str}"
         ]
         
         # 添加布林线信息
@@ -581,14 +587,14 @@ class BollStrategy:
             upper = current_data.get('UPPER', 0)
             lower = current_data.get('LOWER', 0)
             if direction == 1:  # 做多
-                message_lines.append(f"上轨：{upper:.2f}，当前价格：{price:.2f}，突破上轨：满足")
+                message_lines.append(f"上轨：{upper:.0f} ，当前价格：{price:.0f}，突破上轨：满足")
             else:  # 做空
-                message_lines.append(f"下轨：{lower:.2f}，当前价格：{price:.2f}，突破下轨：满足")
+                message_lines.append(f"下轨：{lower:.0f} ，当前价格：{price:.0f}，突破下轨：满足")
         else:
             message_lines.append(reason)
         
         message_lines.append(f"满足开仓条件，开仓方向：{direction_text}")
-        message_lines.append(f"开仓价格：{price:.2f}")
+        message_lines.append(f"开仓价格：{price:.1f}")
         
         message = "\n".join(message_lines)
         
@@ -622,12 +628,30 @@ class BollStrategy:
             profit_desc = f"亏损{abs(profit):.2f}元"
         
         # 构建平仓消息
-        message_lines = [
-            "【布林线策略信号播报】",
-            f"品种：{self.config.PRODUCT_NAME}（{self.config.PRODUCT_TYPE}）  周期：{self.config.KLINE_PERIOD}  时间：{time_str}",
-            f"开仓价格：{self.position.entry_price:.2f}，当前价格：{price:.2f}，方向：{direction_text}",
-            f"{reason}，本单{profit_desc}。"
-        ]
+        if "止损" in reason:
+            # 止损播报
+            message_lines = [
+                "【布林线策略信号播报】",
+                f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}）  周期：{self.config.KLINE_PERIOD}  时间：{time_str}",
+                f"开仓价格：{self.position.entry_price:.0f}，当前价格：{price:.0f}",
+                f"触发{reason}，立刻平仓，本单{profit_desc}"
+            ]
+        elif "强制平仓" in reason or "收盘" in reason:
+            # 强制平仓播报
+            message_lines = [
+                "【布林线策略信号播报】",
+                f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}）  周期：{self.config.KLINE_PERIOD}  时间：{time_str}",
+                f"开仓价格：{self.position.entry_price:.0f}，当前价格：{price:.0f}，方向：{direction_text}",
+                f"{reason}，本单{profit_desc}。"
+            ]
+        else:
+            # 正常平仓播报
+            message_lines = [
+                "【布林线策略信号播报】",
+                f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}）  周期：{self.config.KLINE_PERIOD}  时间：{time_str}",
+                f"开仓价格：{self.position.entry_price:.0f}，当前价格：{price:.0f}，方向：{direction_text}",
+                f"{reason}，本单{profit_desc}。"
+            ]
         
         message = "\n".join(message_lines)
         
@@ -650,10 +674,13 @@ class BollStrategy:
                 'current_price': self.position.current_price,
                 'stop_loss_price': self.position.stop_loss_price,
                 'atr_at_entry': self.position.atr_at_entry,
-                'breakeven_level': self.position.breakeven_level
+                'breakeven_level': self.position.breakeven_level,
+                'max_profit': self.position.max_profit,
+                'main_contract': self.main_contract
             }
             # 保存时间设为24小时，确保隔夜后也能恢复
             self.redis_client.setex('boll_strategy_position', 86400, json.dumps(position_data))
+            Logger.debug("持仓信息已保存到Redis")
         except Exception as e:
             Logger.error(f"保存持仓到Redis失败: {e}")
     
@@ -671,18 +698,23 @@ class BollStrategy:
                 self.position.stop_loss_price = position_data.get('stop_loss_price', 0.0)
                 self.position.atr_at_entry = position_data.get('atr_at_entry', 0.0)
                 self.position.breakeven_level = position_data.get('breakeven_level', 0)
+                self.position.max_profit = position_data.get('max_profit', 0.0)
+                
+                # 恢复主力合约
+                if 'main_contract' in position_data:
+                    self.main_contract = position_data['main_contract']
                 
                 # 如果恢复了持仓，输出详细信息
                 if self.position.direction != 0:
                     direction_text = "多" if self.position.direction == 1 else "空"
                     Logger.info("="*50)
-                    Logger.info("🔄 从Redis恢复持仓信息：")
-                    Logger.info(f"  方向: {direction_text}")
-                    Logger.info(f"  开仓价格: {self.position.entry_price:.2f}")
-                    Logger.info(f"  当前价格: {self.position.current_price:.2f}")
-                    Logger.info(f"  止损价格: {self.position.stop_loss_price:.2f}")
-                    Logger.info(f"  保本级别: {self.position.breakeven_level}")
-                    Logger.info(f"  ATR: {self.position.atr_at_entry:.2f}")
+                    Logger.info("🔄 检测到未平仓持仓，正在恢复...")
+                    Logger.info(f"  持仓方向: {direction_text}单")
+                    Logger.info(f"  开仓价格: {self.position.entry_price:.0f}")
+                    Logger.info(f"  上次价格: {self.position.current_price:.0f}")
+                    Logger.info(f"  止损价格: {self.position.stop_loss_price:.0f if self.position.stop_loss_price > 0 else '未设置'}")
+                    Logger.info(f"  保本状态: {'[已保本]' if self.position.breakeven_level > 0 else '[未保本]'}")
+                    Logger.info(f"  最大盈利: {self.position.max_profit:.0f}元")
                     if self.position.entry_time:
                         Logger.info(f"  开仓时间: {self.position.entry_time.strftime('%Y-%m-%d %H:%M:%S')}")
                     Logger.info("="*50)
@@ -692,9 +724,10 @@ class BollStrategy:
                         f"【策略恢复通知】\n"
                         f"布林线策略重启成功\n"
                         f"检测到未平仓的{direction_text}单\n"
-                        f"开仓价格：{self.position.entry_price:.2f}\n"
-                        f"当前止损价：{self.position.stop_loss_price:.2f if self.position.stop_loss_price > 0 else '无'}\n"
+                        f"开仓价格：{self.position.entry_price:.0f}\n"
+                        f"当前止损价：{self.position.stop_loss_price:.0f if self.position.stop_loss_price > 0 else '无'}\n"
                         f"保本状态：{'已保本' if self.position.breakeven_level > 0 else '未保本'}\n"
+                        f"最大盈利：{self.position.max_profit:.0f}元\n"
                         f"继续监控中..."
                     )
                     try:
@@ -1092,11 +1125,11 @@ class BollStrategy:
                 signal_result = self.check_signals_with_kline(contract_code)
                 
                 if signal_result == "open":
-                    Logger.info(f"📢 新开仓位成功")
+                    Logger.info(f"📢 开仓信号触发，已执行开仓")
                 elif signal_result == "close":
-                    Logger.info(f"📤 平仓执行完成")
+                    Logger.info(f"📤 平仓信号触发，已执行平仓")
                 else:
-                    Logger.debug(f"无交易信号")
+                    Logger.debug(f"无有效交易信号")
             
         except Exception as e:
             Logger.error(f"策略执行异常: {e}")
@@ -1106,7 +1139,7 @@ class BollStrategy:
     def download_history_data(self, contract_code):
         """下载历史数据"""
         try:
-            Logger.info(f"开始下载历史数据: {contract_code}")
+            Logger.info(f"📁 开始下载历史数据: {contract_code}")
             
             # 获取最近的交易日
             current_time = datetime.now()
@@ -1189,7 +1222,7 @@ class BollStrategy:
         # 策略启动通知
         Logger.info("="*50)
         Logger.info("🚀 布林线策略正在启动...")
-        Logger.info(f"策略版本: V2.3")
+        Logger.info(f"策略版本: V2.5")
         Logger.info(f"交易品种: {self.config.PRODUCT_NAME}({self.config.PRODUCT_TYPE})")
         Logger.info(f"布林线参数: {self.config.BOLL_PERIOD}周期, {self.config.BOLL_STD}倍标准差")
         Logger.info(f"风控参数: 硬止损{self.config.HARD_STOP_LOSS}元, ATR倍数{self.config.ATR_MULTIPLIER_FOR_PROFIT}")
