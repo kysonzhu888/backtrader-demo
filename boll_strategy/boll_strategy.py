@@ -1275,7 +1275,7 @@ class BollStrategy:
 
 def main():
     """主函数"""
-    sleep(random.randint(1,10))
+    sleep(random.randint(1,20))
     strategy = BollStrategy()
     
     try:

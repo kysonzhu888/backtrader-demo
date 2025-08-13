@@ -129,6 +129,6 @@ def run_weather_report():
 
 if __name__ == "__main__":
     # 直接运行任务（用于测试）
-    sleep(random.randint(1,10))
+    sleep(random.randint(1,20))
 
     run_weather_report()

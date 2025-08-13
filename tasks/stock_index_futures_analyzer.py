@@ -548,7 +548,7 @@ def run_stock_index_futures_analysis(first_run=False):
 
 def main():
     """主函数 - 用于直接测试"""
-    sleep(random.randint(1,10))
+    sleep(random.randint(1,20))
 
     analyzer = FuturesNetShortAnalyzer()
     success = analyzer.run_analysis()
