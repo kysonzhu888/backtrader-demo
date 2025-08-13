@@ -638,18 +638,32 @@ class BollStrategy:
                     end_time=end_time.strftime('%Y%m%d%H%M%S')
                 )
                 
-                if df is not None and not df.empty:
-                    Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                if df is not None:
+                    # 检查df的类型
+                    if isinstance(df, dict):
+                        # 如果返回的是字典，尝试提取数据
+                        if contract_code in df:
+                            df = df[contract_code]
+                        else:
+                            Logger.warning("get_market_data返回字典但没有找到合约数据")
+                            return None
                     
-                    # 重命名列以匹配预期格式
-                    if 'volume' in df.columns:
-                        df = df.rename(columns={'volume': 'vol'})
-                    
-                    # 计算技术指标
-                    df = self.calculate_indicators(df)
-                    
-                    Logger.debug(f"获取到K线数据，行数: {len(df)}, 最新时间: {df.index[-1] if not df.empty else 'N/A'}")
-                    return df
+                    # 确保df是DataFrame
+                    if isinstance(df, pd.DataFrame) and not df.empty:
+                        Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                        
+                        # 重命名列以匹配预期格式
+                        if 'volume' in df.columns:
+                            df = df.rename(columns={'volume': 'vol'})
+                        
+                        # 计算技术指标
+                        df = self.calculate_indicators(df)
+                        
+                        Logger.debug(f"获取到K线数据，行数: {len(df)}, 最新时间: {df.index[-1] if not df.empty else 'N/A'}")
+                        return df
+                    else:
+                        Logger.warning("get_market_data未返回有效数据")
+                        return None
                 else:
                     Logger.warning("两种方法都未获取到K线数据")
                     return None
@@ -680,18 +694,29 @@ class BollStrategy:
                         end_time=end_time.strftime('%Y%m%d%H%M%S')
                     )
                     
-                    if df is not None and not df.empty:
-                        Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                    if df is not None:
+                        # 检查df的类型
+                        if isinstance(df, dict):
+                            # 如果返回的是字典，尝试提取数据
+                            if contract_code in df:
+                                df = df[contract_code]
+                            else:
+                                Logger.warning("get_market_data返回字典但没有找到合约数据")
+                                return None
                         
-                        # 重命名列以匹配预期格式
-                        if 'volume' in df.columns:
-                            df = df.rename(columns={'volume': 'vol'})
+                        # 确保df是DataFrame
+                        if isinstance(df, pd.DataFrame) and not df.empty:
+                            Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                            
+                            # 重命名列以匹配预期格式
+                            if 'volume' in df.columns:
+                                df = df.rename(columns={'volume': 'vol'})
                         
-                        # 计算技术指标
-                        df = self.calculate_indicators(df)
-                        return df
-                    else:
-                        return None
+                            # 计算技术指标
+                            df = self.calculate_indicators(df)
+                            return df
+                        else:
+                            return None
                 
                 # 设置时间索引
                 # 处理时间戳，迅投返回的是毫秒时间戳
@@ -734,16 +759,29 @@ class BollStrategy:
                     end_time=end_time.strftime('%Y%m%d%H%M%S')
                 )
                 
-                if df is not None and not df.empty:
-                    Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                if df is not None:
+                    # 检查df的类型
+                    if isinstance(df, dict):
+                        # 如果返回的是字典，尝试提取数据
+                        if contract_code in df:
+                            df = df[contract_code]
+                        else:
+                            Logger.warning("get_market_data返回字典但没有找到合约数据")
+                            return None
                     
-                    # 重命名列以匹配预期格式
-                    if 'volume' in df.columns:
-                        df = df.rename(columns={'volume': 'vol'})
-                    
-                    # 计算技术指标
-                    df = self.calculate_indicators(df)
-                    return df
+                    # 确保df是DataFrame
+                    if isinstance(df, pd.DataFrame) and not df.empty:
+                        Logger.info(f"使用get_market_data获取到数据，行数: {len(df)}")
+                        
+                        # 重命名列以匹配预期格式
+                        if 'volume' in df.columns:
+                            df = df.rename(columns={'volume': 'vol'})
+                        
+                            # 计算技术指标
+                            df = self.calculate_indicators(df)
+                            return df
+                        else:
+                            return None
                 else:
                     return None
             
@@ -774,8 +812,20 @@ class BollStrategy:
                 end_time=end_time.strftime('%Y%m%d%H%M%S')
             )
             
-            if df is not None and not df.empty:
-                return df['close'].iloc[-1]
+            if df is not None:
+                # 检查df的类型
+                if isinstance(df, dict):
+                    # 如果返回的是字典，尝试提取数据
+                    if contract_code in df:
+                        df = df[contract_code]
+                    else:
+                        return None
+                
+                # 确保df是DataFrame
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    return df['close'].iloc[-1]
+                else:
+                    return None
             
             return None
             
