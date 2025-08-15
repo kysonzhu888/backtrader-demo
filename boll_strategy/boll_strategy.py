@@ -314,10 +314,19 @@ class BollStrategy:
             # 判断K线颜色
             color = "红" if close >= open_price else "绿"
             
-            Logger.info(f"📈 当前走势 - 开:{open_price:.2f} 高:{high:.2f} 低:{low:.2f} 收:{close:.2f} ({color})")
-            Logger.info(f"📍 布林线位置 - 上轨:{upper:.2f} 中轨:{middle:.2f} 下轨:{lower:.2f}")
-            Logger.info(f"📊 相对位置: {position_pct:.1f}% (0%=下轨, 50%=中轨, 100%=上轨)")
-            Logger.info(f"🔄 ATR: {atr:.2f}")
+            # 获取时间信息
+            time_str = latest_data.name.strftime('%H:%M:%S') if hasattr(latest_data.name, 'strftime') else str(latest_data.name)
+            
+            Logger.info(f"📈 [{time_str}] K线 - 开:{open_price:.0f} 高:{high:.0f} 低:{low:.0f} 收:{close:.0f} ({color})")
+            Logger.info(f"📍 布林线 - 上轨:{upper:.2f} 中轨:{middle:.2f} 下轨:{lower:.2f}")
+            Logger.info(f"📊 位置: {position_pct:.1f}% | ATR: {atr:.2f}点")
+            
+            # 输出布林线计算细节（调试用）
+            if 'STD' in latest_data:
+                std = latest_data.get('STD', 0)
+                Logger.debug(f"  布林线计算: MA20={middle:.2f}, STD={std:.2f}, 倍数={self.config.BOLL_STD}")
+                Logger.debug(f"  验证: 上轨={middle:.2f}+{self.config.BOLL_STD}*{std:.2f}={middle + self.config.BOLL_STD * std:.2f}")
+                Logger.debug(f"  验证: 下轨={middle:.2f}-{self.config.BOLL_STD}*{std:.2f}={middle - self.config.BOLL_STD * std:.2f}")
             
             # 判断当前位置状态
             if close > upper:
@@ -362,6 +371,7 @@ class BollStrategy:
     def calculate_indicators(self, df):
         """计算技术指标"""
         if len(df) < max(self.config.BOLL_PERIOD, self.config.ATR_PERIOD):
+            Logger.debug(f"数据不足，需要{max(self.config.BOLL_PERIOD, self.config.ATR_PERIOD)}条，当前{len(df)}条")
             return df
         
         # 计算布林线
@@ -370,6 +380,20 @@ class BollStrategy:
         df['UPPER'] = df['MA'] + (df['STD'] * self.config.BOLL_STD)
         df['LOWER'] = df['MA'] - (df['STD'] * self.config.BOLL_STD)
         df['MIDDLE'] = df['MA']
+        
+        # 输出详细的布林线计算过程（仅最后一条）
+        if len(df) >= self.config.BOLL_PERIOD:
+            last_row = df.iloc[-1]
+            # 获取计算中轨的原始20根K线收盘价
+            close_data = df['close'].iloc[-self.config.BOLL_PERIOD:].values
+            time_str = last_row.name.strftime('%H:%M:%S') if hasattr(last_row.name, 'strftime') else str(last_row.name)
+            
+            Logger.debug(f"布林线计算[{time_str}]:")
+            Logger.debug(f"  20根K线收盘价: {close_data[:3].round(0)}...{close_data[-3:].round(0)}")
+            Logger.debug(f"  平均值(MA20): {close_data.mean():.2f}")
+            Logger.debug(f"  标准差(STD): {close_data.std():.2f}")
+            Logger.debug(f"  上轨: {close_data.mean():.2f} + 2*{close_data.std():.2f} = {close_data.mean() + 2*close_data.std():.2f}")
+            Logger.debug(f"  下轨: {close_data.mean():.2f} - 2*{close_data.std():.2f} = {close_data.mean() - 2*close_data.std():.2f}")
         
         # 计算ATR
         df['TR'] = np.maximum(
@@ -882,6 +906,11 @@ class BollStrategy:
                 # 重命名列
                 df = df.rename(columns={'volume': 'vol'})
                 
+                # 输出原始数据信息（调试用）
+                if len(df) > 0:
+                    Logger.debug(f"数据范围: {df.index[0].strftime('%H:%M')} - {df.index[-1].strftime('%H:%M')}, 共{len(df)}条")
+                    Logger.debug(f"最后5根K线收盘价: {df['close'].tail(5).values.round(0)}")
+                
                 # 计算技术指标
                 df = self.calculate_indicators(df)
                 
@@ -1043,6 +1072,11 @@ class BollStrategy:
         min_required = max(self.config.BOLL_PERIOD, self.config.ATR_PERIOD)
         if len(df) < min_required:
             Logger.debug(f"K线数据不足（当前{len(df)}条，需要至少{min_required}条），跳过信号检查")
+            return None
+        
+        # 数据完整性检查
+        if 'MIDDLE' not in df.columns or df['MIDDLE'].isna().all():
+            Logger.warning("布林线中轨计算失败，数据可能异常")
             return None
         
         current_time = datetime.now()
