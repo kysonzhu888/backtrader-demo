@@ -1438,7 +1438,10 @@ class BollStrategy:
                         # 定期更新Redis中的持仓信息
                         self._save_position_to_redis()
             
-            # 3. 每分钟检查一次开平仓信号（基于K线收盘价）
+            # 3. 检查是否需要发送绩效报告（独立于信号检查，确保能准时触发）
+            self.check_performance_report(current_time)
+            
+            # 4. 每分钟检查一次开平仓信号（基于K线收盘价）
             # 只在新的分钟开始时检查信号，避免频繁检查
             if not hasattr(self, '_last_signal_check_minute'):
                 self._last_signal_check_minute = current_time.minute
@@ -1457,9 +1460,6 @@ class BollStrategy:
                     Logger.info(f"📤 平仓信号触发，已执行平仓")
                 else:
                     Logger.debug(f"无有效交易信号")
-            
-            # 4. 检查是否需要发送绩效报告
-            self.check_performance_report(current_time)
             
         except Exception as e:
             Logger.error(f"策略执行异常: {e}")
