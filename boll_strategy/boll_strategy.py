@@ -994,12 +994,6 @@ class BollStrategy:
                 (self.last_weekly_report_date is None or self.last_weekly_report_date < current_time.date())):
                 Logger.info(f"触发周报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 self.generate_weekly_report(current_time)
-            
-            # 测试用：15:30触发日报（方便调试）
-            if (current_time.hour == 15 and 30 <= current_time.minute <= 31 and 
-                (self.last_daily_report_date is None or self.last_daily_report_date < current_time.date())):
-                Logger.info(f"[测试] 触发日报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
-                self.generate_daily_report(current_time)
         
         except Exception as e:
             Logger.error(f"检查绩效报告失败: {e}")
