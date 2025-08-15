@@ -50,7 +50,7 @@ class BollStrategyConfig:
     WARMUP_PERIOD = 30  # 预热期（需要足够的数据计算指标）
     
     # 布林线参数
-    BOLL_PERIOD = 20  # 布林线周期
+    BOLL_PERIOD = 26  # 布林线周期
     BOLL_STD = 2.0  # 标准差倍数
     
     # ATR参数
@@ -83,6 +83,19 @@ class BollStrategyConfig:
     
     # 微信播报
     WECHAT_GROUP = "动力波策略群"
+
+
+class TradeRecord:
+    """交易记录"""
+    
+    def __init__(self):
+        self.entry_time = None  # 开仓时间
+        self.exit_time = None  # 平仓时间
+        self.entry_price = 0.0  # 开仓价格
+        self.exit_price = 0.0  # 平仓价格
+        self.direction = 0  # 1: 多仓, -1: 空仓
+        self.profit = 0.0  # 盈亏金额
+        self.exit_reason = ""  # 平仓原因
 
 
 class Position:
@@ -138,6 +151,9 @@ class BollStrategy:
         self.is_running = False
         self.data_lock = threading.Lock()
         self.main_contract = None  # 主力合约代码
+        self.trade_history = []  # 交易历史记录
+        self.last_daily_report_date = None  # 上次日报日期
+        self.last_weekly_report_date = None  # 上次周报日期
         
         # 初始化Redis缓存
         self.redis_client = redis.Redis(
@@ -321,13 +337,6 @@ class BollStrategy:
             Logger.info(f"📍 布林线 - 上轨:{upper:.2f} 中轨:{middle:.2f} 下轨:{lower:.2f}")
             Logger.info(f"📊 位置: {position_pct:.1f}% | ATR: {atr:.2f}点")
             
-            # 输出布林线计算细节（调试用）
-            if 'STD' in latest_data:
-                std = latest_data.get('STD', 0)
-                Logger.debug(f"  布林线计算: MA20={middle:.2f}, STD={std:.2f}, 倍数={self.config.BOLL_STD}")
-                Logger.debug(f"  验证: 上轨={middle:.2f}+{self.config.BOLL_STD}*{std:.2f}={middle + self.config.BOLL_STD * std:.2f}")
-                Logger.debug(f"  验证: 下轨={middle:.2f}-{self.config.BOLL_STD}*{std:.2f}={middle - self.config.BOLL_STD * std:.2f}")
-            
             # 判断当前位置状态
             if close > upper:
                 Logger.info("⚠️ 当前价格突破上轨")
@@ -380,20 +389,6 @@ class BollStrategy:
         df['UPPER'] = df['MA'] + (df['STD'] * self.config.BOLL_STD)
         df['LOWER'] = df['MA'] - (df['STD'] * self.config.BOLL_STD)
         df['MIDDLE'] = df['MA']
-        
-        # 输出详细的布林线计算过程（仅最后一条）
-        if len(df) >= self.config.BOLL_PERIOD:
-            last_row = df.iloc[-1]
-            # 获取计算中轨的原始20根K线收盘价
-            close_data = df['close'].iloc[-self.config.BOLL_PERIOD:].values
-            time_str = last_row.name.strftime('%H:%M:%S') if hasattr(last_row.name, 'strftime') else str(last_row.name)
-            
-            Logger.debug(f"布林线计算[{time_str}]:")
-            Logger.debug(f"  20根K线收盘价: {close_data[:3].round(0)}...{close_data[-3:].round(0)}")
-            Logger.debug(f"  平均值(MA20): {close_data.mean():.2f}")
-            Logger.debug(f"  标准差(STD): {close_data.std():.2f}")
-            Logger.debug(f"  上轨: {close_data.mean():.2f} + 2*{close_data.std():.2f} = {close_data.mean() + 2*close_data.std():.2f}")
-            Logger.debug(f"  下轨: {close_data.mean():.2f} - 2*{close_data.std():.2f} = {close_data.mean() - 2*close_data.std():.2f}")
         
         # 计算ATR
         df['TR'] = np.maximum(
@@ -636,6 +631,20 @@ class BollStrategy:
         self.position.update_current_price(price)
         profit = self.position.profit
         
+        # 记录交易
+        trade = TradeRecord()
+        trade.entry_time = self.position.entry_time
+        trade.exit_time = current_time
+        trade.entry_price = self.position.entry_price
+        trade.exit_price = price
+        trade.direction = self.position.direction
+        trade.profit = profit
+        trade.exit_reason = reason
+        self.trade_history.append(trade)
+        
+        # 保存交易历史到Redis
+        self._save_trade_history_to_redis()
+        
         direction_text = "多" if self.position.is_long() else "空"
         
         # 如果是止损，记录时间
@@ -769,6 +778,208 @@ class BollStrategy:
             self.redis_client.delete('boll_strategy_position')
         except Exception as e:
             Logger.error(f"清除Redis持仓信息失败: {e}")
+    
+    def _save_trade_history_to_redis(self):
+        """保存交易历史到Redis"""
+        try:
+            # 只保存最近100条交易记录
+            recent_trades = self.trade_history[-100:] if len(self.trade_history) > 100 else self.trade_history
+            
+            trade_data = []
+            for trade in recent_trades:
+                trade_data.append({
+                    'entry_time': trade.entry_time.isoformat() if trade.entry_time else None,
+                    'exit_time': trade.exit_time.isoformat() if trade.exit_time else None,
+                    'entry_price': trade.entry_price,
+                    'exit_price': trade.exit_price,
+                    'direction': trade.direction,
+                    'profit': trade.profit,
+                    'exit_reason': trade.exit_reason
+                })
+            
+            # 保存7天
+            self.redis_client.setex('boll_strategy_trade_history', 604800, json.dumps(trade_data))
+            Logger.debug(f"交易历史已保存到Redis，共{len(trade_data)}条记录")
+        except Exception as e:
+            Logger.error(f"保存交易历史到Redis失败: {e}")
+    
+    def _load_trade_history_from_redis(self):
+        """从Redis加载交易历史"""
+        try:
+            data = self.redis_client.get('boll_strategy_trade_history')
+            if data:
+                trade_data = json.loads(data)
+                self.trade_history = []
+                
+                for td in trade_data:
+                    trade = TradeRecord()
+                    if td.get('entry_time'):
+                        trade.entry_time = datetime.fromisoformat(td['entry_time'])
+                    if td.get('exit_time'):
+                        trade.exit_time = datetime.fromisoformat(td['exit_time'])
+                    trade.entry_price = td.get('entry_price', 0.0)
+                    trade.exit_price = td.get('exit_price', 0.0)
+                    trade.direction = td.get('direction', 0)
+                    trade.profit = td.get('profit', 0.0)
+                    trade.exit_reason = td.get('exit_reason', '')
+                    self.trade_history.append(trade)
+                
+                Logger.info(f"从Redis加载了{len(self.trade_history)}条交易记录")
+        except Exception as e:
+            Logger.error(f"从Redis加载交易历史失败: {e}")
+    
+    def generate_daily_report(self, current_time):
+        """生成日报"""
+        try:
+            # 获取今天的交易（包括昨晚21:00到今天15:00）
+            today_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            yesterday_night_start = (today_start - timedelta(days=1)).replace(hour=21, minute=0, second=0)
+            
+            # 筛选时间范围内的交易
+            daily_trades = []
+            for trade in self.trade_history:
+                if trade.exit_time and yesterday_night_start <= trade.exit_time <= current_time:
+                    daily_trades.append(trade)
+            
+            if not daily_trades:
+                # 没有交易也要播报
+                message_lines = [
+                    "【布林线策略每日战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{current_time.strftime('%Y-%m-%d')}（昨天21:00-今天15:00）",
+                    "今日无交易"
+                ]
+            else:
+                # 统计盈亏
+                profit_trades = [t for t in daily_trades if t.profit > 0]
+                loss_trades = [t for t in daily_trades if t.profit <= 0]
+                
+                profit_count = len(profit_trades)
+                loss_count = len(loss_trades)
+                
+                max_profit = max([t.profit for t in profit_trades]) if profit_trades else 0
+                max_loss = min([t.profit for t in loss_trades]) if loss_trades else 0
+                
+                total_profit = sum([t.profit for t in daily_trades])
+                
+                message_lines = [
+                    "【布林线策略每日战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{current_time.strftime('%Y-%m-%d')}（昨天21:00-今天15:00）"
+                ]
+                
+                profit_loss_line = ""
+                if profit_count > 0:
+                    profit_loss_line += f"盈利 {profit_count} 笔，单笔最大盈利 {max_profit:.0f} 元"
+                if loss_count > 0:
+                    if profit_count > 0:
+                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                    else:
+                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                
+                if profit_loss_line:
+                    message_lines.append(profit_loss_line)
+                
+                if total_profit >= 0:
+                    message_lines.append(f"总盈利 {total_profit:.0f} 元")
+                else:
+                    message_lines.append(f"总亏损 {abs(total_profit):.0f} 元")
+            
+            message = "\n".join(message_lines)
+            send_message(message, self.config.WECHAT_GROUP)
+            Logger.info(f"📊 日报已发送 - 交易数: {len(daily_trades)}")
+            
+            # 记录发送时间
+            self.last_daily_report_date = current_time.date()
+            
+        except Exception as e:
+            Logger.error(f"生成日报失败: {e}")
+    
+    def generate_weekly_report(self, current_time):
+        """生成周报"""
+        try:
+            # 获取本周的交易（包括上周五21:00到本周五15:00）
+            # 找到本周一
+            days_since_monday = current_time.weekday()
+            monday = current_time - timedelta(days=days_since_monday)
+            monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # 上周五21:00
+            last_friday_night = monday - timedelta(days=3)
+            last_friday_night = last_friday_night.replace(hour=21, minute=0, second=0)
+            
+            # 筛选时间范围内的交易
+            weekly_trades = []
+            for trade in self.trade_history:
+                if trade.exit_time and last_friday_night <= trade.exit_time <= current_time:
+                    weekly_trades.append(trade)
+            
+            if not weekly_trades:
+                # 没有交易也要播报
+                message_lines = [
+                    "【布林线策略每周战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{last_friday_night.strftime('%Y-%m-%d')} 至 {current_time.strftime('%Y-%m-%d')}",
+                    "本周无交易"
+                ]
+            else:
+                # 统计盈亏
+                profit_trades = [t for t in weekly_trades if t.profit > 0]
+                loss_trades = [t for t in weekly_trades if t.profit <= 0]
+                
+                profit_count = len(profit_trades)
+                loss_count = len(loss_trades)
+                
+                max_profit = max([t.profit for t in profit_trades]) if profit_trades else 0
+                max_loss = min([t.profit for t in loss_trades]) if loss_trades else 0
+                
+                total_profit = sum([t.profit for t in weekly_trades])
+                
+                message_lines = [
+                    "【布林线策略每周战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{last_friday_night.strftime('%Y-%m-%d')} 至 {current_time.strftime('%Y-%m-%d')}"
+                ]
+                
+                profit_loss_line = ""
+                if profit_count > 0:
+                    profit_loss_line += f"盈利 {profit_count} 笔，单笔最大盈利 {max_profit:.0f} 元"
+                if loss_count > 0:
+                    if profit_count > 0:
+                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                    else:
+                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                
+                if profit_loss_line:
+                    message_lines.append(profit_loss_line)
+                
+                if total_profit >= 0:
+                    message_lines.append(f"总盈利 {total_profit:.0f} 元")
+                else:
+                    message_lines.append(f"总亏损 {abs(total_profit):.0f} 元")
+            
+            message = "\n".join(message_lines)
+            send_message(message, self.config.WECHAT_GROUP)
+            Logger.info(f"📊 周报已发送 - 交易数: {len(weekly_trades)}")
+            
+            # 记录发送时间
+            self.last_weekly_report_date = current_time.date()
+            
+        except Exception as e:
+            Logger.error(f"生成周报失败: {e}")
+    
+    def check_performance_report(self, current_time):
+        """检查是否需要发送绩效报告"""
+        try:
+            # 检查日报（每天15:00）
+            if (current_time.hour == 15 and current_time.minute == 0 and 
+                (self.last_daily_report_date is None or self.last_daily_report_date < current_time.date())):
+                self.generate_daily_report(current_time)
+            
+            # 检查周报（每周五15:05）
+            if (current_time.weekday() == 4 and  # 周五
+                current_time.hour == 15 and current_time.minute == 5 and
+                (self.last_weekly_report_date is None or self.last_weekly_report_date < current_time.date())):
+                self.generate_weekly_report(current_time)
+        
+        except Exception as e:
+            Logger.error(f"检查绩效报告失败: {e}")
     
     def fetch_kline_data(self, contract_code):
         """获取1分钟K线数据用于信号判断"""
@@ -906,10 +1117,6 @@ class BollStrategy:
                 # 重命名列
                 df = df.rename(columns={'volume': 'vol'})
                 
-                # 输出原始数据信息（调试用）
-                if len(df) > 0:
-                    Logger.debug(f"数据范围: {df.index[0].strftime('%H:%M')} - {df.index[-1].strftime('%H:%M')}, 共{len(df)}条")
-                    Logger.debug(f"最后5根K线收盘价: {df['close'].tail(5).values.round(0)}")
                 
                 # 计算技术指标
                 df = self.calculate_indicators(df)
@@ -1251,6 +1458,9 @@ class BollStrategy:
                 else:
                     Logger.debug(f"无有效交易信号")
             
+            # 4. 检查是否需要发送绩效报告
+            self.check_performance_report(current_time)
+            
         except Exception as e:
             Logger.error(f"策略执行异常: {e}")
             import traceback
@@ -1366,8 +1576,9 @@ class BollStrategy:
         except Exception as e:
             Logger.warning(f"发送启动通知失败: {e}")
         
-        # 从Redis恢复持仓信息
+        # 从Redis恢复持仓信息和交易历史
         self._load_position_from_redis()
+        self._load_trade_history_from_redis()
         
         # 获取主力合约
         contract_code = self.get_main_contract()
