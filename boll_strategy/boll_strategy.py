@@ -967,16 +967,24 @@ class BollStrategy:
     def check_performance_report(self, current_time):
         """检查是否需要发送绩效报告"""
         try:
-            # 检查日报（每天15:00）
-            if (current_time.hour == 15 and current_time.minute == 0 and 
+            # 检查日报（每天15:00-15:01之间触发一次）
+            if (current_time.hour == 15 and 0 <= current_time.minute <= 1 and 
                 (self.last_daily_report_date is None or self.last_daily_report_date < current_time.date())):
+                Logger.info(f"触发日报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 self.generate_daily_report(current_time)
             
-            # 检查周报（每周五15:05）
+            # 检查周报（每周五15:05-15:06之间触发一次）
             if (current_time.weekday() == 4 and  # 周五
-                current_time.hour == 15 and current_time.minute == 5 and
+                current_time.hour == 15 and 5 <= current_time.minute <= 6 and
                 (self.last_weekly_report_date is None or self.last_weekly_report_date < current_time.date())):
+                Logger.info(f"触发周报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 self.generate_weekly_report(current_time)
+            
+            # 测试用：15:30触发日报（方便调试）
+            if (current_time.hour == 15 and 30 <= current_time.minute <= 31 and 
+                (self.last_daily_report_date is None or self.last_daily_report_date < current_time.date())):
+                Logger.info(f"[测试] 触发日报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                self.generate_daily_report(current_time)
         
         except Exception as e:
             Logger.error(f"检查绩效报告失败: {e}")
@@ -1376,6 +1384,9 @@ class BollStrategy:
         try:
             current_time = datetime.now()
             
+            # 先检查绩效报告（即使在非交易时间也要检查，确保15:00后的报告能发送）
+            self.check_performance_report(current_time)
+            
             # 检查是否在交易时间
             next_trading_time = self.get_next_trading_time(current_time)
             if next_trading_time:
@@ -1438,10 +1449,7 @@ class BollStrategy:
                         # 定期更新Redis中的持仓信息
                         self._save_position_to_redis()
             
-            # 3. 检查是否需要发送绩效报告（独立于信号检查，确保能准时触发）
-            self.check_performance_report(current_time)
-            
-            # 4. 每分钟检查一次开平仓信号（基于K线收盘价）
+            # 3. 每分钟检查一次开平仓信号（基于K线收盘价）
             # 只在新的分钟开始时检查信号，避免频繁检查
             if not hasattr(self, '_last_signal_check_minute'):
                 self._last_signal_check_minute = current_time.minute
