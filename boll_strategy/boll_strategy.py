@@ -1402,8 +1402,13 @@ class BollStrategy:
                         Logger.info(f"下次启动: {next_trading_time.strftime('%Y-%m-%d %H:%M:%S')}")
                         Logger.info(f"休眠时长: {sleep_seconds/3600:.1f}小时")
                         Logger.info("="*50)
+                    
+                    # 特殊处理：15:00-15:10期间需要短间隔检查，以便执行绩效播报
+                    if current_time.hour == 15 and 0 <= current_time.minute < 10:
+                        # 在绩效播报时间段内，每分钟检查一次
+                        time.sleep(60)
                     # 休眠时间较长时，每30分钟检查一次
-                    if sleep_seconds > 1800:
+                    elif sleep_seconds > 1800:
                         time.sleep(1800)  # 睡眠30分钟
                     else:
                         time.sleep(max(60, sleep_seconds))  # 至少睡眠1分钟
