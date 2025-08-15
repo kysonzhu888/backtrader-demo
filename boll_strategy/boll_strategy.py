@@ -986,14 +986,14 @@ class BollStrategy:
         """检查是否需要发送绩效报告"""
         try:
             # 检查日报（根据配置的时间触发）
-            daily_hour, daily_min_start, daily_min_end = Config.DAILY_REPORT_TIME
+            daily_hour, daily_min_start, daily_min_end = BollStrategyConfig.DAILY_REPORT_TIME
             if (current_time.hour == daily_hour and daily_min_start <= current_time.minute <= daily_min_end and 
                 (self.last_daily_report_date is None or self.last_daily_report_date < current_time.date())):
                 Logger.info(f"触发日报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 self.generate_daily_report(current_time)
             
             # 检查周报（根据配置的时间触发）
-            weekly_hour, weekly_min_start, weekly_min_end = Config.WEEKLY_REPORT_TIME
+            weekly_hour, weekly_min_start, weekly_min_end = BollStrategyConfig.WEEKLY_REPORT_TIME
             if (current_time.weekday() == 4 and  # 周五
                 current_time.hour == weekly_hour and weekly_min_start <= current_time.minute <= weekly_min_end and
                 (self.last_weekly_report_date is None or self.last_weekly_report_date < current_time.date())):
@@ -1423,18 +1423,18 @@ class BollStrategy:
                     current_minutes = current_time.hour * 60 + current_time.minute
                     
                     # 检查日报时间窗口
-                    daily_hour, daily_min_start, daily_min_end = Config.DAILY_REPORT_TIME
-                    daily_start = daily_hour * 60 + daily_min_start - Config.REPORT_PREPARE_MINUTES
-                    daily_end = daily_hour * 60 + daily_min_end + Config.REPORT_CLEANUP_MINUTES
+                    daily_hour, daily_min_start, daily_min_end = BollStrategyConfig.DAILY_REPORT_TIME
+                    daily_start = daily_hour * 60 + daily_min_start - BollStrategyConfig.REPORT_PREPARE_MINUTES
+                    daily_end = daily_hour * 60 + daily_min_end + BollStrategyConfig.REPORT_CLEANUP_MINUTES
                     
                     if daily_start <= current_minutes <= daily_end:
                         need_short_poll = True
                     
                     # 检查周报时间窗口（仅周五）
                     if current_time.weekday() == 4:  # 周五
-                        weekly_hour, weekly_min_start, weekly_min_end = Config.WEEKLY_REPORT_TIME
-                        weekly_start = weekly_hour * 60 + weekly_min_start - Config.REPORT_PREPARE_MINUTES
-                        weekly_end = weekly_hour * 60 + weekly_min_end + Config.REPORT_CLEANUP_MINUTES
+                        weekly_hour, weekly_min_start, weekly_min_end = BollStrategyConfig.WEEKLY_REPORT_TIME
+                        weekly_start = weekly_hour * 60 + weekly_min_start - BollStrategyConfig.REPORT_PREPARE_MINUTES
+                        weekly_end = weekly_hour * 60 + weekly_min_end + BollStrategyConfig.REPORT_CLEANUP_MINUTES
                         
                         if weekly_start <= current_minutes <= weekly_end:
                             need_short_poll = True
@@ -1442,10 +1442,10 @@ class BollStrategy:
                     # 根据是否需要短间隔轮询来决定休眠时间
                     if need_short_poll:
                         # 在报告时间窗口内，使用短间隔轮询
-                        time.sleep(Config.SHORT_POLL_INTERVAL)
-                    elif sleep_seconds > Config.LONG_POLL_INTERVAL:
+                        time.sleep(BollStrategyConfig.SHORT_POLL_INTERVAL)
+                    elif sleep_seconds > BollStrategyConfig.LONG_POLL_INTERVAL:
                         # 休眠时间较长时，使用长间隔轮询
-                        time.sleep(Config.LONG_POLL_INTERVAL)
+                        time.sleep(BollStrategyConfig.LONG_POLL_INTERVAL)
                     else:
                         # 其他情况，正常休眠
                         time.sleep(max(60, sleep_seconds))  # 至少睡眠1分钟
