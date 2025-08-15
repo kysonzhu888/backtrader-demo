@@ -83,6 +83,19 @@ class BollStrategyConfig:
     
     # 微信播报
     WECHAT_GROUP = "动力波策略群"
+    
+    # 绩效报告配置
+    DAILY_REPORT_TIME = (15, 0, 1)  # 日报时间 (小时, 开始分钟, 结束分钟)
+    WEEKLY_REPORT_TIME = (15, 5, 6)  # 周报时间 (小时, 开始分钟, 结束分钟)
+    
+    # 非交易时段轮询配置
+    # 定义需要短间隔轮询的时间段（即使在非交易时段也要频繁检查）
+    SHORT_POLL_PERIODS = [
+        (15, 0, 15, 10),  # 每天15:00-15:10需要短间隔轮询（用于日报和周报）
+        # 可以添加更多时间段，格式：(小时, 开始分钟, 结束小时, 结束分钟)
+    ]
+    SHORT_POLL_INTERVAL = 60  # 短间隔轮询的秒数（60秒）
+    LONG_POLL_INTERVAL = 1800  # 长间隔轮询的秒数（30分钟）
 
 
 class TradeRecord:
@@ -967,15 +980,17 @@ class BollStrategy:
     def check_performance_report(self, current_time):
         """检查是否需要发送绩效报告"""
         try:
-            # 检查日报（每天15:00-15:01之间触发一次）
-            if (current_time.hour == 15 and 0 <= current_time.minute <= 1 and 
+            # 检查日报（根据配置的时间触发）
+            daily_hour, daily_min_start, daily_min_end = Config.DAILY_REPORT_TIME
+            if (current_time.hour == daily_hour and daily_min_start <= current_time.minute <= daily_min_end and 
                 (self.last_daily_report_date is None or self.last_daily_report_date < current_time.date())):
                 Logger.info(f"触发日报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 self.generate_daily_report(current_time)
             
-            # 检查周报（每周五15:05-15:06之间触发一次）
+            # 检查周报（根据配置的时间触发）
+            weekly_hour, weekly_min_start, weekly_min_end = Config.WEEKLY_REPORT_TIME
             if (current_time.weekday() == 4 and  # 周五
-                current_time.hour == 15 and 5 <= current_time.minute <= 6 and
+                current_time.hour == weekly_hour and weekly_min_start <= current_time.minute <= weekly_min_end and
                 (self.last_weekly_report_date is None or self.last_weekly_report_date < current_time.date())):
                 Logger.info(f"触发周报生成 - 时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 self.generate_weekly_report(current_time)
@@ -1403,14 +1418,27 @@ class BollStrategy:
                         Logger.info(f"休眠时长: {sleep_seconds/3600:.1f}小时")
                         Logger.info("="*50)
                     
-                    # 特殊处理：15:00-15:10期间需要短间隔检查，以便执行绩效播报
-                    if current_time.hour == 15 and 0 <= current_time.minute < 10:
-                        # 在绩效播报时间段内，每分钟检查一次
-                        time.sleep(60)
-                    # 休眠时间较长时，每30分钟检查一次
-                    elif sleep_seconds > 1800:
-                        time.sleep(1800)  # 睡眠30分钟
+                    # 判断是否需要短间隔轮询
+                    need_short_poll = False
+                    for start_hour, start_min, end_hour, end_min in Config.SHORT_POLL_PERIODS:
+                        # 处理时间比较（考虑跨小时的情况）
+                        current_minutes = current_time.hour * 60 + current_time.minute
+                        start_minutes = start_hour * 60 + start_min
+                        end_minutes = end_hour * 60 + end_min
+                        
+                        if start_minutes <= current_minutes < end_minutes:
+                            need_short_poll = True
+                            break
+                    
+                    # 根据是否需要短间隔轮询来决定休眠时间
+                    if need_short_poll:
+                        # 在需要短间隔轮询的时间段内
+                        time.sleep(Config.SHORT_POLL_INTERVAL)
+                    elif sleep_seconds > Config.LONG_POLL_INTERVAL:
+                        # 休眠时间较长时，使用长间隔轮询
+                        time.sleep(Config.LONG_POLL_INTERVAL)
                     else:
+                        # 其他情况，正常休眠
                         time.sleep(max(60, sleep_seconds))  # 至少睡眠1分钟
                     return
             else:
