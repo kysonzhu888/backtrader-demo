@@ -84,18 +84,23 @@ class BollStrategyConfig:
     # 微信播报
     WECHAT_GROUP = "动力波策略群"
     
-    # 绩效报告配置
+    # ==================== 绩效报告配置 ====================
+    # 说明：策略会自动在报告时间前后保持短间隔轮询，确保不会错过报告时间
+    
+    # 日报配置
     DAILY_REPORT_TIME = (15, 0, 1)  # 日报时间 (小时, 开始分钟, 结束分钟)
+    
+    # 周报配置  
     WEEKLY_REPORT_TIME = (15, 5, 6)  # 周报时间 (小时, 开始分钟, 结束分钟)
     
-    # 非交易时段轮询配置
-    # 定义需要短间隔轮询的时间段（即使在非交易时段也要频繁检查）
-    SHORT_POLL_PERIODS = [
-        (15, 0, 15, 10),  # 每天15:00-15:10需要短间隔轮询（用于日报和周报）
-        # 可以添加更多时间段，格式：(小时, 开始分钟, 结束小时, 结束分钟)
-    ]
-    SHORT_POLL_INTERVAL = 60  # 短间隔轮询的秒数（60秒）
-    LONG_POLL_INTERVAL = 1800  # 长间隔轮询的秒数（30分钟）
+    # 轮询策略配置
+    # 在非交易时段，策略会智能调整轮询频率：
+    # - 在报告时间前后自动使用短间隔轮询
+    # - 其他时间使用长间隔轮询以节省资源
+    SHORT_POLL_INTERVAL = 60      # 短间隔：60秒（用于报告时间附近）
+    LONG_POLL_INTERVAL = 1800      # 长间隔：30分钟（用于其他非交易时段）
+    REPORT_PREPARE_MINUTES = 5     # 报告前准备时间（提前5分钟开始短轮询）
+    REPORT_CLEANUP_MINUTES = 5     # 报告后清理时间（延后5分钟结束短轮询）
 
 
 class TradeRecord:
@@ -1412,21 +1417,31 @@ class BollStrategy:
                         Logger.info(f"休眠时长: {sleep_seconds/3600:.1f}小时")
                         Logger.info("="*50)
                     
-                    # 判断是否需要短间隔轮询
+                    # 智能判断是否需要短间隔轮询
+                    # 自动根据配置的报告时间计算轮询策略
                     need_short_poll = False
-                    for start_hour, start_min, end_hour, end_min in Config.SHORT_POLL_PERIODS:
-                        # 处理时间比较（考虑跨小时的情况）
-                        current_minutes = current_time.hour * 60 + current_time.minute
-                        start_minutes = start_hour * 60 + start_min
-                        end_minutes = end_hour * 60 + end_min
+                    current_minutes = current_time.hour * 60 + current_time.minute
+                    
+                    # 检查日报时间窗口
+                    daily_hour, daily_min_start, daily_min_end = Config.DAILY_REPORT_TIME
+                    daily_start = daily_hour * 60 + daily_min_start - Config.REPORT_PREPARE_MINUTES
+                    daily_end = daily_hour * 60 + daily_min_end + Config.REPORT_CLEANUP_MINUTES
+                    
+                    if daily_start <= current_minutes <= daily_end:
+                        need_short_poll = True
+                    
+                    # 检查周报时间窗口（仅周五）
+                    if current_time.weekday() == 4:  # 周五
+                        weekly_hour, weekly_min_start, weekly_min_end = Config.WEEKLY_REPORT_TIME
+                        weekly_start = weekly_hour * 60 + weekly_min_start - Config.REPORT_PREPARE_MINUTES
+                        weekly_end = weekly_hour * 60 + weekly_min_end + Config.REPORT_CLEANUP_MINUTES
                         
-                        if start_minutes <= current_minutes < end_minutes:
+                        if weekly_start <= current_minutes <= weekly_end:
                             need_short_poll = True
-                            break
                     
                     # 根据是否需要短间隔轮询来决定休眠时间
                     if need_short_poll:
-                        # 在需要短间隔轮询的时间段内
+                        # 在报告时间窗口内，使用短间隔轮询
                         time.sleep(Config.SHORT_POLL_INTERVAL)
                     elif sleep_seconds > Config.LONG_POLL_INTERVAL:
                         # 休眠时间较长时，使用长间隔轮询
