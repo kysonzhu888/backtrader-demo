@@ -1,0 +1,14 @@
+帮我重构动力波策略，策略入口文件是：power_wave_strategy/power_wave.py。
+之前策略的数据来源是 tushare，现在要换成 xtdata。
+动力波仍然默认采用沪金，但是不排除后期要使用其他商品期货，所以最好做成可以配置的。
+接下来是项目架构，我觉得可以参考boll_strategy，不需要之前的 vectorbt了。
+其他的和之前保持一致，比如播报格式，硬止损，浮动止盈 等等。
+如果有其他问题你可以随时问我
+
+
+待解决：
+报错了
+时间：2025-08-18 22:06:17
+2025-08-18 22:06:17 - default_ERROR - ERROR - 策略运行异常: 'NoneType' object is not iterable
+2025-08-18 22:06:27 - default_ERROR - ERROR - 策略运行异常: 'NoneType' object is not iterable
+2025-08-18 22:06:37 - default_ERROR - ERROR - 策略运行异常: 'NoneType' object is not iterable-18 21:54:14 - default_ERROR - ERROR - 未找到沪金期货合约

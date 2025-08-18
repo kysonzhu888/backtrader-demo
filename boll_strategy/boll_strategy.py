@@ -1002,6 +1002,7 @@ class BollStrategy:
         
         except Exception as e:
             Logger.error(f"检查绩效报告失败: {e}")
+
     
     def fetch_kline_data(self, contract_code):
         """获取1分钟K线数据用于信号判断"""

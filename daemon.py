@@ -114,7 +114,7 @@ def start_process(script_name, args=None, logger=None):
 
 PROCESS_CONFIG = {
     # "main.py": {"script": "main.py"},
-    "pow_wave_strategy.py": {"script": os.path.join("power_wave_strategy", "pow_wave_strategy.py")},
+    "power_wave_xtdata.py": {"script": os.path.join("power_wave_strategy", "power_wave_xtdata.py")},
     "boll_strategy.py": {"script": os.path.join("boll_strategy", "boll_strategy.py")},
     "task_scheduler.py": {"script": "task_scheduler.py"},
     # # "stock_market_service.py": {"script": os.path.join("mini_stock", "stock_market_service.py")},
