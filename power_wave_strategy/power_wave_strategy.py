@@ -1057,11 +1057,8 @@ class PowerWaveStrategy:
                     # 检查是否需要发送报告
                     self.check_performance_report(current_time)
                     
-                    # 计算到下一个交易时段的时间
-                    next_trading_time = self.trading_helper.get_next_trading_time(current_time)
-                    if next_trading_time:
-                        time_to_next = (next_trading_time - current_time).total_seconds()
-                        Logger.info(f"非交易时间，下一个交易时段: {next_trading_time.strftime('%Y-%m-%d %H:%M:%S')} ({time_to_next/60:.0f}分钟后)")
+                    # 非交易时间提示
+                    Logger.info(f"当前为非交易时间: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                     
                     # 长间隔休眠
                     sleep(self.config.LONG_POLL_INTERVAL)

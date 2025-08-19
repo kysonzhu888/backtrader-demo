@@ -6,6 +6,18 @@
 如果有其他问题你可以随时问我
 
 
-待解决：
-你得好好看一下之前动力波的代码。尤其是判断是否开单的逻辑，除了满足动力波颜色变化之外，还有其他的条件。
-我这里大概说一下，一个是 macd，一个是布林线
+待修复：
+运行了一下，报错了
+品种：沪金(au)
+时间：2025-08-19 08:17:40
+2025-08-19 08:17:40 - default_ERROR - ERROR - 策略运行异常: 'TradingTimeHelper' object has no attribute 'get_next_trading_time'
+2025-08-19 08:17:40 - default_ERROR - ERROR - Traceback (most recent call last):
+  File "D:\backtrader-demo\power_wave_strategy\power_wave_strategy.py", line 1061, in run_loop
+    next_trading_time = self.trading_helper.get_next_trading_time(current_time)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TradingTimeHelper' object has no attribute 'get_next_trading_time'
+
+2025-08-19 08:17:46 - default_INFO - INFO -
+收到停止信号，正在安全退出...
+2025-08-19 08:17:50 - default_INFO - INFO - 策略已停止
+2025-08-19 08:17:50 - default_INFO - INFO - 策略已安全停止
