@@ -647,15 +647,14 @@ class PowerWaveStrategy:
             
             # 转换为标准格式
             df_formatted = pd.DataFrame({
-                'time': df.index,
                 'open': df['open'],
                 'high': df['high'],
                 'low': df['low'],
                 'close': df['close'],
                 'volume': df['volume']
-            })
+            }, index=df.index)
             
-            df_formatted.set_index('time', inplace=True)
+            # 保留原始索引格式（可能是字符串或datetime）
             
             Logger.debug(f"获取到K线数据，行数: {len(df_formatted)}, 最新时间: {df_formatted.index[-1]}")
             
@@ -799,7 +798,19 @@ class PowerWaveStrategy:
                     current_color = self.indicator.get_color(-1)
                     color_text = "🔴" if current_color == 'red' else "🟢"
                     
-                    Logger.info(f"📈 [{self.data_window.index[-1].strftime('%H:%M:%S')}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
+                    # 处理时间格式
+                    time_str = self.data_window.index[-1]
+                    if isinstance(time_str, str):
+                        # 如果是字符串格式，如 '20250819090600'
+                        if len(time_str) == 14:
+                            time_formatted = f"{time_str[8:10]}:{time_str[10:12]}:{time_str[12:14]}"
+                        else:
+                            time_formatted = time_str
+                    else:
+                        # 如果是datetime对象
+                        time_formatted = time_str.strftime('%H:%M:%S')
+                    
+                    Logger.info(f"📈 [{time_formatted}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
                     Logger.info(f"📍 动力波 - VARD:{vard_val:.2f} VARE:{vare_val:.2f} 柱高:{bar_height:.2f} {color_text}")
                     
                     # 输出MACD和布林线信息
@@ -1016,7 +1027,19 @@ class PowerWaveStrategy:
                                 k_close = latest['close']
                                 k_color = "红" if k_close >= k_open else "绿"
                                 
-                                Logger.info(f"📈 [{self.data_window.index[-1].strftime('%H:%M:%S')}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
+                                # 处理时间格式
+                    time_str = self.data_window.index[-1]
+                    if isinstance(time_str, str):
+                        # 如果是字符串格式，如 '20250819090600'
+                        if len(time_str) == 14:
+                            time_formatted = f"{time_str[8:10]}:{time_str[10:12]}:{time_str[12:14]}"
+                        else:
+                            time_formatted = time_str
+                    else:
+                        # 如果是datetime对象
+                        time_formatted = time_str.strftime('%H:%M:%S')
+                    
+                    Logger.info(f"📈 [{time_formatted}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
                                 
                                 if self.indicator.vard is not None and self.indicator.vare is not None:
                                     vard_val = self.indicator.vard.iloc[-1]
