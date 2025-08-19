@@ -1028,18 +1028,18 @@ class PowerWaveStrategy:
                                 k_color = "红" if k_close >= k_open else "绿"
                                 
                                 # 处理时间格式
-                    time_str = self.data_window.index[-1]
-                    if isinstance(time_str, str):
-                        # 如果是字符串格式，如 '20250819090600'
-                        if len(time_str) == 14:
-                            time_formatted = f"{time_str[8:10]}:{time_str[10:12]}:{time_str[12:14]}"
-                        else:
-                            time_formatted = time_str
-                    else:
-                        # 如果是datetime对象
-                        time_formatted = time_str.strftime('%H:%M:%S')
-                    
-                    Logger.info(f"📈 [{time_formatted}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
+                                time_str = self.data_window.index[-1]
+                                if isinstance(time_str, str):
+                                    # 如果是字符串格式，如 '20250819090600'
+                                    if len(time_str) == 14:
+                                        time_formatted = f"{time_str[8:10]}:{time_str[10:12]}:{time_str[12:14]}"
+                                    else:
+                                        time_formatted = time_str
+                                else:
+                                    # 如果是datetime对象
+                                    time_formatted = time_str.strftime('%H:%M:%S')
+                                
+                                Logger.info(f"📈 [{time_formatted}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
                                 
                                 if self.indicator.vard is not None and self.indicator.vare is not None:
                                     vard_val = self.indicator.vard.iloc[-1]

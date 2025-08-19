@@ -8,24 +8,13 @@
 
 待修复：
 运行了一下，报错了
-2025-08-19 09:06:37 - default_INFO - INFO - Tick数据下载完成: au10.SF
-2025-08-19 09:06:37 - default_INFO - INFO - 已订阅tick数据: au10.SF
-2025-08-19 09:06:37 - default_INFO - INFO - 已订阅1分钟K线数据: au10.SF
-2025-08-19 09:06:37 - default_DEBUG - DEBUG - 获取K线数据: au10.SF, 时间范围: 2025-08-19 01:06:37 - 2025-08-19 09:06:37
-2025-08-19 09:06:37 - default_DEBUG - DEBUG - 获取到K线数据，行数: 119, 最新时间: 20250819090600
-2025-08-19 09:06:37 - default_ERROR - ERROR - 策略运行异常: 'str' object has no attribute 'strftime'
-2025-08-19 09:06:37 - default_ERROR - ERROR - Traceback (most recent call last):
-  File "F:\backtrader-demo\power_wave_strategy\power_wave_strategy.py", line 1019, in run_loop
-    Logger.info(f"📈 [{self.data_window.index[-1].strftime('%H:%M:%S')}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'str' object has no attribute 'strftime'
-2025-08-19 09:06:47 - default_INFO - INFO - ✅ 动力波策略启动成功 - 合约: au10.SF
-2025-08-19 09:06:47 - default_INFO - INFO - ✅ 当前为交易时间，开始监控
-2025-08-19 09:06:47 - default_DEBUG - DEBUG - 获取K线数据: au10.SF, 时间范围: 2025-08-19 01:06:47 - 2025-08-19 09:06:47
-2025-08-19 09:06:47 - default_DEBUG - DEBUG - 获取到K线数据，行数: 49, 最新时间: 20250819090700
-2025-08-19 09:06:47 - default_ERROR - ERROR - 处理行情数据异常: 'str' object has no attribute 'strftime'
-2025-08-19 09:06:47 - default_DEBUG - DEBUG - Traceback (most recent call last):
-  File "F:\backtrader-demo\power_wave_strategy\power_wave_strategy.py", line 802, in process_tick
-    Logger.info(f"📈 [{self.data_window.index[-1].strftime('%H:%M:%S')}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'str' object has no attribute 'strftime'
+已连接到 pydev 调试器(内部版本号 251.26927.90)Traceback (most recent call last):
+  File "D:\Program Files\JetBrains\PyCharm 2025.1.3.1\plugins\python-ce\helpers\pydev\pydevd.py", line 1570, in _exec
+    pydev_imports.execfile(file, globals, locals)  # execute the script
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Program Files\JetBrains\PyCharm 2025.1.3.1\plugins\python-ce\helpers\pydev\_pydev_imps\_pydev_execfile.py", line 18, in execfile
+    exec(compile(contents+"\n", file, 'exec'), glob, loc)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\backtrader-demo\power_wave_strategy\power_wave_strategy.py", line 1044
+    if self.indicator.vard is not None and self.indicator.vare is not None:
+IndentationError: unexpected indent
