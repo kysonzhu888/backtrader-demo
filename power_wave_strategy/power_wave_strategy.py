@@ -123,6 +123,19 @@ class PowerWaveIndicator:
         self.vare = None
         self.bar_height = None
         
+        # MACD相关
+        self.macd = None
+        self.macd_signal = None
+        self.macd_hist = None
+        
+        # 布林线相关
+        self.boll_upper = None
+        self.boll_middle = None
+        self.boll_lower = None
+        
+        # 百分位相关
+        self.percentile = None
+        
     def update(self, data_window):
         """更新指标"""
         if len(data_window) < self.config.POWER_WAVE_HL_PERIOD:
@@ -157,6 +170,62 @@ class PowerWaveIndicator:
         # 计算柱高
         self.bar_height = abs(self.vard - self.vare)
         
+        # 计算MACD指标
+        self._calculate_macd()
+        
+        # 计算布林线指标
+        self._calculate_bollinger()
+        
+        # 计算百分位
+        self._calculate_percentile()
+    
+    def _calculate_macd(self):
+        """计算MACD指标"""
+        if self.close is None or len(self.close) < 26:
+            return
+        
+        # 计算EMA12和EMA26
+        ema12 = self.close.ewm(span=12, adjust=False).mean()
+        ema26 = self.close.ewm(span=26, adjust=False).mean()
+        
+        # 计算MACD线
+        self.macd = ema12 - ema26
+        
+        # 计算信号线（9周期EMA）
+        self.macd_signal = self.macd.ewm(span=9, adjust=False).mean()
+        
+        # 计算MACD柱
+        self.macd_hist = self.macd - self.macd_signal
+    
+    def _calculate_bollinger(self):
+        """计算布林线指标"""
+        if self.close is None or len(self.close) < 20:
+            return
+        
+        # 计算20周期均线（中轨）
+        self.boll_middle = self.close.rolling(window=20).mean()
+        
+        # 计算标准差
+        std = self.close.rolling(window=20).std()
+        
+        # 计算上下轨（2倍标准差）
+        self.boll_upper = self.boll_middle + 2 * std
+        self.boll_lower = self.boll_middle - 2 * std
+    
+    def _calculate_percentile(self):
+        """计算百分位指标"""
+        if self.vard is None or self.vare is None or len(self.vard) < 100:
+            self.percentile = 50  # 默认值
+            return
+        
+        # 使用最近100根K线计算当前vard值的百分位
+        recent_vard = self.vard.iloc[-100:]
+        current_vard = self.vard.iloc[-1]
+        
+        # 计算百分位
+        count_below = (recent_vard < current_vard).sum()
+        self.percentile = (count_below / len(recent_vard)) * 100
+        
     def get_color(self, index=-1):
         """获取K线颜色（红涨绿跌）"""
         if self.vard is None or self.vare is None:
@@ -174,26 +243,101 @@ class PowerWaveIndicator:
             return None
     
     def get_signal(self, data_window):
-        """获取交易信号"""
+        """获取交易信号（综合判断）"""
         if len(data_window) < self.config.WARMUP_PERIOD:
             return 0
             
-        # 检查颜色变化
+        # 1. 检查颜色变化
         current_color = self.get_color(-1)
         prev_color = self.get_color(-2)
         
         if prev_color is None or current_color is None:
             return 0
         
-        # 绿变红 - 做多信号
+        # 判断颜色变化方向
+        color_signal = 0
         if prev_color == 'green' and current_color == 'red':
-            return 1
+            color_signal = 1  # 绿变红 - 潜在做多信号
+        elif prev_color == 'red' and current_color == 'green':
+            color_signal = -1  # 红变绿 - 潜在做空信号
         
-        # 红变绿 - 做空信号  
-        if prev_color == 'red' and current_color == 'green':
-            return -1
-            
+        if color_signal == 0:
+            return 0  # 没有颜色变化，不开仓
+        
+        # 2. 检查MACD条件
+        macd_ok = self._check_macd_condition(color_signal)
+        
+        # 3. 检查布林线条件
+        boll_ok = self._check_boll_condition(color_signal)
+        
+        # 4. 检查百分位条件
+        percentile_ok = self._check_percentile_condition(color_signal)
+        
+        # 输出调试信息
+        Logger.debug(f"信号检查 - 颜色变化: {prev_color}->{current_color}, MACD: {macd_ok}, 布林: {boll_ok}, 百分位: {percentile_ok}")
+        
+        # 所有条件都满足才返回信号
+        if macd_ok and boll_ok and percentile_ok:
+            return color_signal
+        
         return 0
+    
+    def _check_macd_condition(self, signal_direction):
+        """检查MACD条件"""
+        if self.macd is None or self.macd_signal is None:
+            return False
+        
+        try:
+            current_macd = self.macd.iloc[-1]
+            current_signal = self.macd_signal.iloc[-1]
+            
+            if signal_direction == 1:  # 做多
+                # MACD金叉：MACD线在信号线上方
+                return current_macd > current_signal
+            elif signal_direction == -1:  # 做空
+                # MACD死叉：MACD线在信号线下方
+                return current_macd < current_signal
+        except:
+            return False
+        
+        return False
+    
+    def _check_boll_condition(self, signal_direction):
+        """检查布林线条件"""
+        if self.boll_middle is None or self.close is None:
+            return False
+        
+        try:
+            current_close = self.close.iloc[-1]
+            current_middle = self.boll_middle.iloc[-1]
+            
+            if signal_direction == 1:  # 做多
+                # 收盘价在中轨上方
+                return current_close >= current_middle
+            elif signal_direction == -1:  # 做空
+                # 收盘价在中轨下方
+                return current_close < current_middle
+        except:
+            return False
+        
+        return False
+    
+    def _check_percentile_condition(self, signal_direction):
+        """检查百分位条件"""
+        if self.percentile is None:
+            return False
+        
+        try:
+            if signal_direction == 1:  # 做多
+                # 百分位小于25
+                return self.percentile < 25
+            elif signal_direction == -1:  # 做空
+                # 百分位大于75
+                return self.percentile > 75
+        except:
+            return False
+        
+        return False
 
 
 class Position:
@@ -658,6 +802,23 @@ class PowerWaveStrategy:
                     Logger.info(f"📈 [{self.data_window.index[-1].strftime('%H:%M:%S')}] K线 - 开:{k_open:.2f} 高:{k_high:.2f} 低:{k_low:.2f} 收:{k_close:.2f} ({k_color})")
                     Logger.info(f"📍 动力波 - VARD:{vard_val:.2f} VARE:{vare_val:.2f} 柱高:{bar_height:.2f} {color_text}")
                     
+                    # 输出MACD和布林线信息
+                    if self.indicator.macd is not None and self.indicator.macd_signal is not None:
+                        macd_val = self.indicator.macd.iloc[-1]
+                        signal_val = self.indicator.macd_signal.iloc[-1]
+                        macd_status = "金叉" if macd_val > signal_val else "死叉"
+                        Logger.info(f"📊 MACD - DIF:{macd_val:.3f} DEA:{signal_val:.3f} 状态:{macd_status}")
+                    
+                    if self.indicator.boll_middle is not None:
+                        boll_upper = self.indicator.boll_upper.iloc[-1]
+                        boll_middle = self.indicator.boll_middle.iloc[-1]
+                        boll_lower = self.indicator.boll_lower.iloc[-1]
+                        boll_position = "上轨" if k_close > boll_upper else "中轨上" if k_close > boll_middle else "中轨下" if k_close > boll_lower else "下轨"
+                        Logger.info(f"📉 布林线 - 上:{boll_upper:.2f} 中:{boll_middle:.2f} 下:{boll_lower:.2f} 位置:{boll_position}")
+                    
+                    if self.indicator.percentile is not None:
+                        Logger.info(f"📊 百分位: {self.indicator.percentile:.1f}%")
+                    
                     # 如果有持仓，输出持仓状态
                     if not self.position.is_empty():
                         self.position.update_profit(current_price, self.config.CONTRACT_MULTIPLIER)
@@ -717,15 +878,29 @@ class PowerWaveStrategy:
                     signal = self.indicator.get_signal(self.data_window)
                     
                     if signal == 1:  # 做多信号
-                        Logger.info("🔴 检测到绿变红信号，准备做多")
+                        Logger.info("✅ 所有条件满足，执行做多开仓")
+                        Logger.info(f"  - 颜色: 绿变红")
+                        Logger.info(f"  - MACD: 金叉")
+                        Logger.info(f"  - 布林: 价格在中轨上方")
+                        Logger.info(f"  - 百分位: < 25%")
                         stop_price = current_price - self.config.HARD_STOP_LOSS_POINTS
                         self.open_position(1, current_price, current_time, stop_price)
                     elif signal == -1:  # 做空信号
-                        Logger.info("🟢 检测到红变绿信号，准备做空")
+                        Logger.info("✅ 所有条件满足，执行做空开仓")
+                        Logger.info(f"  - 颜色: 红变绿")
+                        Logger.info(f"  - MACD: 死叉")
+                        Logger.info(f"  - 布林: 价格在中轨下方")
+                        Logger.info(f"  - 百分位: > 75%")
                         stop_price = current_price + self.config.HARD_STOP_LOSS_POINTS
                         self.open_position(-1, current_price, current_time, stop_price)
                     else:
-                        Logger.debug("无有效交易信号")
+                        # 检查是否有颜色变化但条件不满足
+                        current_color = self.indicator.get_color(-1)
+                        prev_color = self.indicator.get_color(-2)
+                        if prev_color and current_color and prev_color != current_color:
+                            Logger.debug(f"颜色变化({prev_color}->{current_color})但其他条件不满足，不开仓")
+                        else:
+                            Logger.debug("无有效交易信号")
                         
         except Exception as e:
             Logger.error(f"处理行情数据异常: {e}")
@@ -851,6 +1026,10 @@ class PowerWaveStrategy:
                                     color_text = "🔴" if current_color == 'red' else "🟢"
                                     
                                     Logger.info(f"📍 动力波 - VARD:{vard_val:.2f} VARE:{vare_val:.2f} 柱高:{bar_height:.2f} {color_text}")
+                                    
+                                    # 初始化时也输出其他指标
+                                    if self.indicator.percentile is not None:
+                                        Logger.info(f"📊 百分位: {self.indicator.percentile:.1f}%")
                                 
                                 Logger.info(f"✅ 数据订阅成功，获取到 {len(initial_klines)} 条K线数据")
                             
