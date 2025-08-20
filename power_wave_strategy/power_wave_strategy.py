@@ -213,18 +213,24 @@ class PowerWaveIndicator:
         self.boll_lower = self.boll_middle - 2 * std
     
     def _calculate_percentile(self):
-        """计算百分位指标"""
-        if self.vard is None or self.vare is None or len(self.vard) < 100:
+        """计算百分位指标（实际上是vard或vare的值）"""
+        if self.vard is None or self.vare is None:
             self.percentile = 50  # 默认值
             return
         
-        # 使用最近100根K线计算当前vard值的百分位
-        recent_vard = self.vard.iloc[-100:]
-        current_vard = self.vard.iloc[-1]
+        if len(self.vard) == 0 or len(self.vare) == 0:
+            self.percentile = 50
+            return
         
-        # 计算百分位
-        count_below = (recent_vard < current_vard).sum()
-        self.percentile = (count_below / len(recent_vard)) * 100
+        # 根据当前颜色取对应的值作为"百分位"
+        # 这里的百分位实际上是动力波指标的值，范围大约在0-100之间
+        current_color = self.get_color(-1)
+        if current_color == 'red':
+            # 红色时取vare的值
+            self.percentile = self.vare.iloc[-1]
+        else:
+            # 绿色时取vard的值
+            self.percentile = self.vard.iloc[-1]
         
     def get_color(self, index=-1):
         """获取K线颜色（红涨绿跌）"""
