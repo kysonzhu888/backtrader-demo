@@ -509,6 +509,9 @@ class PowerWaveStrategy:
         self.last_loss_time = None
         self.last_check_time = None  # 上次检查时间
         
+        # 从Redis加载历史交易记录
+        self._load_trade_history_from_redis()
+        
         # 数据缓存
         self.main_contract = None
         self.data_window = pd.DataFrame()
@@ -1099,6 +1102,10 @@ class PowerWaveStrategy:
         trade.exit_reason = reason
         self.trade_history.append(trade)
         
+        # 保存到Redis
+        self._save_trade_history_to_redis()
+        Logger.info(f"交易记录已保存 - 累计交易: {len(self.trade_history)}笔")
+        
         # 构建播报消息
         direction_text = "多" if self.position.is_long() else "空"
         profit_text = f"盈利{profit:.0f}元" if profit > 0 else f"亏损{abs(profit):.0f}元"
@@ -1256,30 +1263,116 @@ class PowerWaveStrategy:
         except Exception as e:
             Logger.error(f"检查绩效报告异常: {e}")
     
+    def _save_trade_history_to_redis(self):
+        """保存交易历史到Redis"""
+        try:
+            if not self.redis_client:
+                return
+                
+            # 只保存最近100条交易记录
+            recent_trades = self.trade_history[-100:] if len(self.trade_history) > 100 else self.trade_history
+            
+            trade_data = []
+            for trade in recent_trades:
+                trade_data.append({
+                    'entry_time': trade.entry_time.isoformat() if trade.entry_time else None,
+                    'exit_time': trade.exit_time.isoformat() if trade.exit_time else None,
+                    'entry_price': trade.entry_price,
+                    'exit_price': trade.exit_price,
+                    'direction': trade.direction,
+                    'profit': trade.profit,
+                    'exit_reason': trade.exit_reason
+                })
+            
+            # 保存7天
+            self.redis_client.setex('power_wave_trade_history', 604800, json.dumps(trade_data))
+            Logger.debug(f"交易历史已保存到Redis，共{len(trade_data)}条记录")
+        except Exception as e:
+            Logger.error(f"保存交易历史到Redis失败: {e}")
+    
+    def _load_trade_history_from_redis(self):
+        """从Redis加载交易历史"""
+        try:
+            if not self.redis_client:
+                return
+                
+            data = self.redis_client.get('power_wave_trade_history')
+            if data:
+                trade_data = json.loads(data)
+                self.trade_history = []
+                
+                for td in trade_data:
+                    trade = TradeRecord()
+                    if td.get('entry_time'):
+                        trade.entry_time = datetime.fromisoformat(td['entry_time'])
+                    if td.get('exit_time'):
+                        trade.exit_time = datetime.fromisoformat(td['exit_time'])
+                    trade.entry_price = td.get('entry_price', 0.0)
+                    trade.exit_price = td.get('exit_price', 0.0)
+                    trade.direction = td.get('direction', 0)
+                    trade.profit = td.get('profit', 0.0)
+                    trade.exit_reason = td.get('exit_reason', '')
+                    self.trade_history.append(trade)
+                
+                Logger.info(f"从Redis加载了{len(self.trade_history)}条交易记录")
+        except Exception as e:
+            Logger.error(f"从Redis加载交易历史失败: {e}")
+    
     def send_daily_report(self, current_time):
         """发送日报"""
         try:
-            # 统计今日交易
-            today_trades = [t for t in self.trade_history 
-                          if t.exit_time and t.exit_time.date() == current_time.date()]
+            # 获取今天的交易（包括昨晚21:00到今天15:00）
+            today_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            yesterday_night_start = (today_start - timedelta(days=1)).replace(hour=21, minute=0, second=0)
             
-            total_profit = sum(t.profit for t in today_trades)
-            win_trades = [t for t in today_trades if t.profit > 0]
-            loss_trades = [t for t in today_trades if t.profit < 0]
+            # 筛选时间范围内的交易
+            daily_trades = []
+            for trade in self.trade_history:
+                if trade.exit_time and yesterday_night_start <= trade.exit_time <= current_time:
+                    daily_trades.append(trade)
             
-            message_lines = [
-                "【动力波策略日报】",
-                f"日期: {current_time.strftime('%Y-%m-%d')}",
-                f"品种: {self.config.PRODUCT_NAME}({self.config.PRODUCT_TYPE})",
-                f"",
-                f"📊 今日交易统计:",
-                f"交易次数: {len(today_trades)}次",
-                f"盈利次数: {len(win_trades)}次",
-                f"亏损次数: {len(loss_trades)}次",
-                f"胜率: {len(win_trades)/len(today_trades)*100:.1f}%" if today_trades else "胜率: -",
-                f"",
-                f"💰 今日盈亏: {total_profit:.0f}元",
-            ]
+            # 统计交易信息
+            if not daily_trades:
+                # 没有交易也要播报
+                message_lines = [
+                    "【动力波策略每日战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{current_time.strftime('%Y-%m-%d')}（昨天21:00-今天15:00）",
+                    "今日无交易"
+                ]
+            else:
+                # 统计盈亏
+                profit_trades = [t for t in daily_trades if t.profit > 0]
+                loss_trades = [t for t in daily_trades if t.profit <= 0]
+                
+                profit_count = len(profit_trades)
+                loss_count = len(loss_trades)
+                
+                max_profit = max([t.profit for t in profit_trades]) if profit_trades else 0
+                max_loss = min([t.profit for t in loss_trades]) if loss_trades else 0
+                
+                total_profit = sum([t.profit for t in daily_trades])
+                
+                message_lines = [
+                    "【动力波策略每日战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{current_time.strftime('%Y-%m-%d')}（昨天21:00-今天15:00）"
+                ]
+                
+                profit_loss_line = ""
+                if profit_count > 0:
+                    profit_loss_line += f"盈利 {profit_count} 笔，单笔最大盈利 {max_profit:.0f} 元"
+                if loss_count > 0:
+                    if profit_count > 0:
+                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                    else:
+                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                
+                if profit_loss_line:
+                    message_lines.append(profit_loss_line)
+                
+                if total_profit >= 0:
+                    message_lines.append(f"总盈利 {total_profit:.0f} 元")
+                else:
+                    message_lines.append(f"总亏损 {abs(total_profit):.0f} 元")
             
             # 添加当前持仓信息
             if not self.position.is_empty():
@@ -1302,42 +1395,67 @@ class PowerWaveStrategy:
     def send_weekly_report(self, current_time):
         """发送周报"""
         try:
-            # 统计本周交易
-            week_start = current_time - timedelta(days=current_time.weekday())
-            week_trades = [t for t in self.trade_history 
-                          if t.exit_time and t.exit_time.date() >= week_start.date()]
+            # 获取本周的交易（包括上周五21:00到本周五15:00）
+            # 找到本周一
+            days_since_monday = current_time.weekday()
+            monday = current_time - timedelta(days=days_since_monday)
+            monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
             
-            total_profit = sum(t.profit for t in week_trades)
-            win_trades = [t for t in week_trades if t.profit > 0]
-            loss_trades = [t for t in week_trades if t.profit < 0]
+            # 上周五21:00
+            last_friday_night = monday - timedelta(days=3)
+            last_friday_night = last_friday_night.replace(hour=21, minute=0, second=0)
             
-            message_lines = [
-                "【动力波策略周报】",
-                f"周期: {week_start.strftime('%Y-%m-%d')} 至 {current_time.strftime('%Y-%m-%d')}",
-                f"品种: {self.config.PRODUCT_NAME}({self.config.PRODUCT_TYPE})",
-                f"",
-                f"📊 本周交易统计:",
-                f"交易次数: {len(week_trades)}次",
-                f"盈利次数: {len(win_trades)}次",
-                f"亏损次数: {len(loss_trades)}次",
-                f"胜率: {len(win_trades)/len(week_trades)*100:.1f}%" if week_trades else "胜率: -",
-                f"",
-                f"💰 本周盈亏: {total_profit:.0f}元",
-            ]
+            # 筛选时间范围内的交易
+            weekly_trades = []
+            for trade in self.trade_history:
+                if trade.exit_time and last_friday_night <= trade.exit_time <= current_time:
+                    weekly_trades.append(trade)
             
-            # 添加最大盈利和最大亏损
-            if week_trades:
-                max_profit_trade = max(week_trades, key=lambda t: t.profit)
-                max_loss_trade = min(week_trades, key=lambda t: t.profit)
-                message_lines.extend([
-                    f"",
-                    f"最大盈利: {max_profit_trade.profit:.0f}元",
-                    f"最大亏损: {max_loss_trade.profit:.0f}元"
-                ])
+            if not weekly_trades:
+                # 没有交易也要播报
+                message_lines = [
+                    "【动力波策略每周战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{last_friday_night.strftime('%Y-%m-%d')} 至 {current_time.strftime('%Y-%m-%d')}",
+                    "本周无交易"
+                ]
+            else:
+                # 统计盈亏
+                profit_trades = [t for t in weekly_trades if t.profit > 0]
+                loss_trades = [t for t in weekly_trades if t.profit <= 0]
+                
+                profit_count = len(profit_trades)
+                loss_count = len(loss_trades)
+                
+                max_profit = max([t.profit for t in profit_trades]) if profit_trades else 0
+                max_loss = min([t.profit for t in loss_trades]) if loss_trades else 0
+                
+                total_profit = sum([t.profit for t in weekly_trades])
+                
+                message_lines = [
+                    "【动力波策略每周战绩播报】",
+                    f"品种：{self.config.PRODUCT_TYPE}（{self.config.PRODUCT_NAME}） 时间：{last_friday_night.strftime('%Y-%m-%d')} 至 {current_time.strftime('%Y-%m-%d')}"
+                ]
+                
+                profit_loss_line = ""
+                if profit_count > 0:
+                    profit_loss_line += f"盈利 {profit_count} 笔，单笔最大盈利 {max_profit:.0f} 元"
+                if loss_count > 0:
+                    if profit_count > 0:
+                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                    else:
+                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                
+                if profit_loss_line:
+                    message_lines.append(profit_loss_line)
+                
+                if total_profit >= 0:
+                    message_lines.append(f"总盈利 {total_profit:.0f} 元")
+                else:
+                    message_lines.append(f"总亏损 {abs(total_profit):.0f} 元")
             
             message = "\n".join(message_lines)
             send_message(message, self.config.WECHAT_GROUP)
-            Logger.info("周报已发送")
+            Logger.info(f"📊 周报已发送 - 交易数: {len(weekly_trades)}")
             
         except Exception as e:
             Logger.error(f"发送周报失败: {e}")
