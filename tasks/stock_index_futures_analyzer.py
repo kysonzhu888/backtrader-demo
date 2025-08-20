@@ -126,12 +126,12 @@ class FuturesNetShortAnalyzer:
     def get_target_date(self) -> datetime:
         """
         获取目标日期
-        下午5点前使用昨天的数据，5点后使用今天的数据
+        下午4点前使用昨天的数据，4点后使用今天的数据
         周末和节假日需要特殊处理
         """
         now = datetime.now()
         
-        if now.hour < 17:  # 下午5点前
+        if now.hour < 16:  # 下午4点前
             target_date = now - timedelta(days=1)
             Logger.info(f"当前时间{now.strftime('%H:%M')}，使用昨天的数据: {target_date.strftime('%Y-%m-%d')}")
         else:
@@ -501,7 +501,7 @@ class FuturesNetShortAnalyzer:
 def run_stock_index_futures_analysis(first_run=False):
     """
     定时执行股指期货净空单分析
-    每天17:00执行
+    每天16:00执行
     """
     from threading import Timer
     from datetime import datetime
@@ -513,14 +513,14 @@ def run_stock_index_futures_analysis(first_run=False):
     
     # 首次启动时发送通知
     if first_run:
-        startup_msg = f"🚀 股指期货分析器已启动\n⏰ 将在每天17:00自动执行分析\n📍 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+        startup_msg = f"🚀 股指期货分析器已启动\n⏰ 将在每天16:00自动执行分析\n📍 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}"
         try:
             send_message(group_chat_name_dlb, startup_msg)
             Logger.info("启动通知已发送到老公老婆群")
         except Exception as e:
             Logger.warning(f"发送启动通知失败: {e}")
     
-    if current_hour == 17:  # 每天17:00执行
+    if current_hour == 16:  # 每天16:00执行
         Logger.info("股指期货净空单分析任务开始执行...", save_to_file=True)
         
         analyzer = FuturesNetShortAnalyzer()
@@ -532,15 +532,15 @@ def run_stock_index_futures_analysis(first_run=False):
             Logger.error("股指期货净空单量分析失败", save_to_file=True)
     else:
         # 计算距离下次执行的时间
-        if current_hour < 17:
-            hours_to_wait = 17 - current_hour
+        if current_hour < 16:
+            hours_to_wait = 16 - current_hour
             minutes_to_wait = -current_minute
         else:
-            hours_to_wait = 24 - current_hour + 17
+            hours_to_wait = 24 - current_hour + 16
             minutes_to_wait = -current_minute
         
         total_minutes = hours_to_wait * 60 + minutes_to_wait
-        Logger.info(f"当前时间 {now.strftime('%H:%M')}，股指期货分析任务将在约{total_minutes}分钟后（17:00）执行")
+        Logger.info(f"当前时间 {now.strftime('%H:%M')}，股指期货分析任务将在约{total_minutes}分钟后（16:00）执行")
     
     # 每小时检查一次
     Timer(60 * 60, lambda: run_stock_index_futures_analysis(False)).start()
