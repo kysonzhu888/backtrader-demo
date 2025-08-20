@@ -1,5 +1,5 @@
 import environment
-from power_wave_strategy.color_change_pending_manager import ColorChangePendingManager
+from color_change_pending_manager import ColorChangePendingManager
 from pow_data_stream_generator import PowDataStreamGenerator
 from power_status import PowerStatus, IntradayStatus
 from power_wave import PowerWave
@@ -14,13 +14,13 @@ import os
 from micro_defs import BarColor
 import logging
 
-from power_wave_strategy.signal_series_manager import SignalSeriesManager
+from signal_series_manager import SignalSeriesManager
 from utils.wechat import send_message, send_message_to_multiple_recipients
 from threading import Timer
 from utils.date_utils import DateUtils
 from utils.trading_time_helper import TradingTimeHelper
 from power_wave_backtrace import PowerWaveBacktrace, AU_CONTRACT_MULTIPLIER
-from power_wave_strategy.back_trace_paradigm import DebugTimeManager
+from back_trace_paradigm import DebugTimeManager
 
 matplotlib.use('Agg')  # 使用 Agg 后端
 plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']  # 设置中文字体

@@ -7,14 +7,7 @@
 
 
 待修复：
-运行了一下，报错了
-已连接到 pydev 调试器(内部版本号 251.26927.90)Traceback (most recent call last):
-  File "D:\Program Files\JetBrains\PyCharm 2025.1.3.1\plugins\python-ce\helpers\pydev\pydevd.py", line 1570, in _exec
-    pydev_imports.execfile(file, globals, locals)  # execute the script
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\Program Files\JetBrains\PyCharm 2025.1.3.1\plugins\python-ce\helpers\pydev\_pydev_imps\_pydev_execfile.py", line 18, in execfile
-    exec(compile(contents+"\n", file, 'exec'), glob, loc)
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "F:\backtrader-demo\power_wave_strategy\power_wave_strategy.py", line 1044
-    if self.indicator.vard is not None and self.indicator.vare is not None:
-IndentationError: unexpected indent
+动力波策略你逻辑应该还是有点问题，我说了要满足三个条件，一个是颜色转变，并且百分比满足，其次是剩下两个：一个是布林线，一个是macd。
+但是你的逻辑好像是颜色转变的同时看是否满足后两个条件，这个是不对的。
+之前的逻辑应该是，颜色转变后，记录这个状态，然后等待其他条件的满足。
+你好好看一下你逻辑，再次对比之前的动力波代码，好好修复下

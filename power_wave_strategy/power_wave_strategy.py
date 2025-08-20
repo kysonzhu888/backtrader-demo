@@ -242,45 +242,35 @@ class PowerWaveIndicator:
         except:
             return None
     
-    def get_signal(self, data_window):
-        """获取交易信号（综合判断）"""
-        if len(data_window) < self.config.WARMUP_PERIOD:
-            return 0
-            
-        # 1. 检查颜色变化
+    def check_color_change(self):
+        """检查颜色变化，返回方向(1:绿变红做多, -1:红变绿做空, 0:无变化)"""
         current_color = self.get_color(-1)
         prev_color = self.get_color(-2)
         
         if prev_color is None or current_color is None:
             return 0
         
-        # 判断颜色变化方向
-        color_signal = 0
+        # 判断颜色变化
         if prev_color == 'green' and current_color == 'red':
-            color_signal = 1  # 绿变红 - 潜在做多信号
+            return 1  # 绿变红 - 做多信号
         elif prev_color == 'red' and current_color == 'green':
-            color_signal = -1  # 红变绿 - 潜在做空信号
-        
-        if color_signal == 0:
-            return 0  # 没有颜色变化，不开仓
-        
-        # 2. 检查MACD条件
-        macd_ok = self._check_macd_condition(color_signal)
-        
-        # 3. 检查布林线条件
-        boll_ok = self._check_boll_condition(color_signal)
-        
-        # 4. 检查百分位条件
-        percentile_ok = self._check_percentile_condition(color_signal)
-        
-        # 输出调试信息
-        Logger.debug(f"信号检查 - 颜色变化: {prev_color}->{current_color}, MACD: {macd_ok}, 布林: {boll_ok}, 百分位: {percentile_ok}")
-        
-        # 所有条件都满足才返回信号
-        if macd_ok and boll_ok and percentile_ok:
-            return color_signal
+            return -1  # 红变绿 - 做空信号
         
         return 0
+    
+    def check_other_conditions(self, direction):
+        """检查除颜色变化外的其他条件"""
+        # 1. 检查MACD条件
+        macd_ok = self._check_macd_condition(direction)
+        
+        # 2. 检查布林线条件
+        boll_ok = self._check_boll_condition(direction)
+        
+        # 输出调试信息
+        Logger.debug(f"其他条件检查 - MACD: {macd_ok}, 布林: {boll_ok}")
+        
+        # MACD和布林线条件都满足
+        return macd_ok and boll_ok
     
     def _check_macd_condition(self, signal_direction):
         """检查MACD条件"""
@@ -401,6 +391,50 @@ class TradeRecord:
         self.exit_reason = ''
 
 
+class PendingSignal:
+    """待开仓信号管理"""
+    
+    def __init__(self):
+        self.active = False  # 是否有待开仓信号
+        self.direction = 0   # 1:做多, -1:做空
+        self.start_time = None  # 信号开始时间
+        self.color_from = None  # 变化前的颜色
+        self.color_to = None    # 变化后的颜色
+        self.percentile_at_signal = None  # 信号时的百分位
+        self.bar_count = 0  # 信号后的K线数
+        self.max_wait_bars = 10  # 最多等待10根K线
+    
+    def set_signal(self, direction, color_from, color_to, percentile, time):
+        """设置待开仓信号"""
+        self.active = True
+        self.direction = direction
+        self.color_from = color_from
+        self.color_to = color_to
+        self.percentile_at_signal = percentile
+        self.start_time = time
+        self.bar_count = 0
+    
+    def clear(self):
+        """清除信号"""
+        self.active = False
+        self.direction = 0
+        self.start_time = None
+        self.color_from = None
+        self.color_to = None
+        self.percentile_at_signal = None
+        self.bar_count = 0
+    
+    def increment_bar_count(self):
+        """增加K线计数"""
+        self.bar_count += 1
+        # 超过最大等待K线数，自动清除信号
+        if self.bar_count > self.max_wait_bars:
+            Logger.info(f"待开仓信号超时({self.max_wait_bars}根K线)，清除信号")
+            self.clear()
+            return False
+        return True
+
+
 class PowerWaveStrategy:
     """动力波策略主类"""
     
@@ -435,6 +469,7 @@ class PowerWaveStrategy:
         # 策略组件
         self.indicator = PowerWaveIndicator(self.config)
         self.position = Position()
+        self.pending_signal = PendingSignal()  # 待开仓信号管理
         self.trade_history = []
         self.last_loss_time = None
         self.last_check_time = None  # 上次检查时间
@@ -860,9 +895,11 @@ class PowerWaveStrategy:
                 # 检查移动止损
                 if self.position.is_long() and current_price <= self.position.stop_price:
                     self.close_position(current_price, current_time, "移动止损")
+                    self.pending_signal.clear()  # 清除待开仓信号
                     return
                 elif self.position.is_short() and current_price >= self.position.stop_price:
                     self.close_position(current_price, current_time, "移动止损")
+                    self.pending_signal.clear()  # 清除待开仓信号
                     return
                 
                 # 更新移动止损
@@ -874,9 +911,11 @@ class PowerWaveStrategy:
                 
                 if self.position.is_long() and current_color == 'green':
                     self.close_position(current_price, current_time, "颜色变绿平多")
+                    self.pending_signal.clear()  # 清除待开仓信号
                     return
                 elif self.position.is_short() and current_color == 'red':
                     self.close_position(current_price, current_time, "颜色变红平空")
+                    self.pending_signal.clear()  # 清除待开仓信号
                     return
             
             # 4. 检查开仓信号
@@ -885,33 +924,76 @@ class PowerWaveStrategy:
                 
                 if not can_open:
                     Logger.debug(f"不满足开仓条件: {reason}")
+                    # 如果有待开仓信号但在保护期，保留信号
+                    if self.pending_signal.active:
+                        Logger.debug(f"保留待开仓信号（{'做多' if self.pending_signal.direction == 1 else '做空'}）")
                 else:
-                    signal = self.indicator.get_signal(self.data_window)
+                    # 检查颜色变化
+                    color_change = self.indicator.check_color_change()
                     
-                    if signal == 1:  # 做多信号
-                        Logger.info("✅ 所有条件满足，执行做多开仓")
-                        Logger.info(f"  - 颜色: 绿变红")
-                        Logger.info(f"  - MACD: 金叉")
-                        Logger.info(f"  - 布林: 价格在中轨上方")
-                        Logger.info(f"  - 百分位: < 25%")
-                        stop_price = current_price - self.config.HARD_STOP_LOSS_POINTS
-                        self.open_position(1, current_price, current_time, stop_price)
-                    elif signal == -1:  # 做空信号
-                        Logger.info("✅ 所有条件满足，执行做空开仓")
-                        Logger.info(f"  - 颜色: 红变绿")
-                        Logger.info(f"  - MACD: 死叉")
-                        Logger.info(f"  - 布林: 价格在中轨下方")
-                        Logger.info(f"  - 百分位: > 75%")
-                        stop_price = current_price + self.config.HARD_STOP_LOSS_POINTS
-                        self.open_position(-1, current_price, current_time, stop_price)
-                    else:
-                        # 检查是否有颜色变化但条件不满足
-                        current_color = self.indicator.get_color(-1)
-                        prev_color = self.indicator.get_color(-2)
-                        if prev_color and current_color and prev_color != current_color:
-                            Logger.debug(f"颜色变化({prev_color}->{current_color})但其他条件不满足，不开仓")
+                    # 如果有颜色变化，记录待开仓信号
+                    if color_change != 0:
+                        # 检查百分位条件
+                        percentile_ok = self.indicator._check_percentile_condition(color_change)
+                        
+                        if percentile_ok:
+                            prev_color = self.indicator.get_color(-2)
+                            current_color = self.indicator.get_color(-1)
+                            percentile = self.indicator.percentile
+                            
+                            # 设置待开仓信号
+                            self.pending_signal.set_signal(
+                                direction=color_change,
+                                color_from=prev_color,
+                                color_to=current_color,
+                                percentile=percentile,
+                                time=current_time
+                            )
+                            
+                            Logger.info(f"🔔 检测到颜色变化：{prev_color} -> {current_color}")
+                            Logger.info(f"  - 方向: {'做多' if color_change == 1 else '做空'}")
+                            Logger.info(f"  - 百分位: {percentile:.1f}% (满足)")
+                            Logger.info(f"  等待MACD和布林线条件满足...")
                         else:
-                            Logger.debug("无有效交易信号")
+                            Logger.debug(f"颜色变化但百分位不满足，忽略")
+                    
+                    # 如果有待开仓信号，检查是否满足其他条件
+                    if self.pending_signal.active:
+                        # 增加K线计数
+                        if self.pending_signal.increment_bar_count():
+                            # 检查颜色是否反转
+                            current_color = self.indicator.get_color(-1)
+                            if (self.pending_signal.direction == 1 and current_color == 'green') or \
+                               (self.pending_signal.direction == -1 and current_color == 'red'):
+                                Logger.info(f"颜色反转，清除待开仓信号")
+                                self.pending_signal.clear()
+                            else:
+                                # 检查其他条件
+                                other_conditions_ok = self.indicator.check_other_conditions(self.pending_signal.direction)
+                                
+                                if other_conditions_ok:
+                                    # 满足所有条件，执行开仓
+                                    direction = self.pending_signal.direction
+                                    Logger.info("✅ 所有条件满足，执行开仓")
+                                    Logger.info(f"  - 方向: {'做多' if direction == 1 else '做空'}")
+                                    Logger.info(f"  - 颜色: {self.pending_signal.color_from} -> {self.pending_signal.color_to} (第{self.pending_signal.bar_count}根K线后)")
+                                    Logger.info(f"  - MACD: {'金叉' if direction == 1 else '死叉'} ✓")
+                                    Logger.info(f"  - 布林: 价格在中轨{'上方' if direction == 1 else '下方'} ✓")
+                                    Logger.info(f"  - 百分位: {self.pending_signal.percentile_at_signal:.1f}%")
+                                    
+                                    if direction == 1:
+                                        stop_price = current_price - self.config.HARD_STOP_LOSS_POINTS
+                                        self.open_position(1, current_price, current_time, stop_price)
+                                    else:
+                                        stop_price = current_price + self.config.HARD_STOP_LOSS_POINTS
+                                        self.open_position(-1, current_price, current_time, stop_price)
+                                    
+                                    # 清除待开仓信号
+                                    self.pending_signal.clear()
+                                else:
+                                    Logger.debug(f"待开仓信号({'做多' if self.pending_signal.direction == 1 else '做空'})等待中，第{self.pending_signal.bar_count}根K线")
+                    else:
+                        Logger.debug("无有效交易信号")
                         
         except Exception as e:
             Logger.error(f"处理行情数据异常: {e}")
@@ -921,6 +1003,10 @@ class PowerWaveStrategy:
     def open_position(self, direction, price, time, stop_price):
         """开仓"""
         self.position.open_position(direction, price, time, stop_price)
+        
+        # 清除待开仓信号（如果有）
+        if self.pending_signal.active:
+            self.pending_signal.clear()
         
         direction_text = "多" if direction == 1 else "空"
         
