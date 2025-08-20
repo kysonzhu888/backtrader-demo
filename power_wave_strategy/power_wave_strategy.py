@@ -60,6 +60,10 @@ class PowerWaveConfig:
     USE_MACD_CONDITION = True        # 是否使用MACD条件
     USE_BOLL_CONDITION = True        # 是否使用布林线条件
     
+    # 布林线参数（与boll_strategy保持一致）
+    BOLL_PERIOD = 26  # 布林线周期
+    BOLL_STD = 2.0    # 标准差倍数
+    
     # 数据配置
     DATA_INTERVAL = 6  # 数据拉取间隔（秒）
     KLINE_PERIOD = '1min'  # 关注的K线周期
@@ -204,18 +208,18 @@ class PowerWaveIndicator:
     
     def _calculate_bollinger(self):
         """计算布林线指标"""
-        if self.close is None or len(self.close) < 20:
+        if self.close is None or len(self.close) < self.config.BOLL_PERIOD:
             return
         
-        # 计算20周期均线（中轨）
-        self.boll_middle = self.close.rolling(window=20).mean()
+        # 计算布林线中轨（使用配置的周期）
+        self.boll_middle = self.close.rolling(window=self.config.BOLL_PERIOD).mean()
         
         # 计算标准差
-        std = self.close.rolling(window=20).std()
+        std = self.close.rolling(window=self.config.BOLL_PERIOD).std()
         
-        # 计算上下轨（2倍标准差）
-        self.boll_upper = self.boll_middle + 2 * std
-        self.boll_lower = self.boll_middle - 2 * std
+        # 计算上下轨（使用配置的标准差倍数）
+        self.boll_upper = self.boll_middle + self.config.BOLL_STD * std
+        self.boll_lower = self.boll_middle - self.config.BOLL_STD * std
     
     def _calculate_percentile(self):
         """计算百分位指标（实际上是vard或vare的值）"""

@@ -75,6 +75,7 @@ def main():
         # 输出配置信息
         Logger.info(f"交易品种: {config.PRODUCT_NAME}({config.PRODUCT_TYPE.upper()})")
         Logger.info(f"动力波参数: {config.POWER_WAVE_HL_PERIOD}周期高低点, EMA({config.POWER_WAVE_EMA1_PERIOD},{config.POWER_WAVE_EMA2_PERIOD})")
+        Logger.info(f"布林线参数: {config.BOLL_PERIOD}周期, {config.BOLL_STD}倍标准差")
         Logger.info(f"风控参数: 硬止损{config.HARD_STOP_LOSS}元")
         Logger.info(f"阶梯止盈阈值: {config.BREAKEVEN_THRESHOLDS}")
         Logger.info(f"阶梯止盈保留: {config.BREAKEVEN_PROFITS}")
