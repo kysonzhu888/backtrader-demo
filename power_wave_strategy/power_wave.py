@@ -67,17 +67,22 @@ def main():
         #     exchange='SF'
         # )
         
+        # 如果需要修改开仓条件，可以这样配置：
+        # config.USE_PERCENTILE_CONDITION = True   # 启用百分位条件
+        # config.USE_MACD_CONDITION = False        # 禁用MACD条件
+        # config.USE_BOLL_CONDITION = True         # 启用布林线条件
+        
         # 输出配置信息
         Logger.info(f"交易品种: {config.PRODUCT_NAME}({config.PRODUCT_TYPE.upper()})")
         Logger.info(f"动力波参数: {config.POWER_WAVE_HL_PERIOD}周期高低点, EMA({config.POWER_WAVE_EMA1_PERIOD},{config.POWER_WAVE_EMA2_PERIOD})")
         Logger.info(f"风控参数: 硬止损{config.HARD_STOP_LOSS}元")
         Logger.info(f"阶梯止盈阈值: {config.BREAKEVEN_THRESHOLDS}")
         Logger.info(f"阶梯止盈保留: {config.BREAKEVEN_PROFITS}")
-        Logger.info("开仓条件:")
-        Logger.info("  1. 动力波颜色变化（红绿切换）")
-        Logger.info("  2. MACD金叉/死叉确认")
-        Logger.info("  3. 价格与布林线中轨关系")
-        Logger.info("  4. 百分位条件（<25%做多，>75%做空）")
+        Logger.info("开仓条件配置:")
+        Logger.info("  1. 动力波颜色变化（必须）")
+        Logger.info(f"  2. 百分位条件（<25%做多，>75%做空）: {'启用' if config.USE_PERCENTILE_CONDITION else '禁用'}")
+        Logger.info(f"  3. MACD条件（金叉/死叉）: {'启用' if config.USE_MACD_CONDITION else '禁用'}")
+        Logger.info(f"  4. 布林线条件（中轨位置）: {'启用' if config.USE_BOLL_CONDITION else '禁用'}")
         Logger.info("保护期设置:")
         Logger.info(f"  - 早盘开盘后: {config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN}分钟")
         Logger.info(f"  - 夜盘开盘后: {config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN}分钟")

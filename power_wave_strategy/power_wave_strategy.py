@@ -55,6 +55,11 @@ class PowerWaveConfig:
     CONTRACT_MULTIPLIER = 1000  # 沪金一个点1000元
     EXCHANGE = 'SF'  # 上期所
     
+    # 开仓条件配置（可设置False禁用某个条件）
+    USE_PERCENTILE_CONDITION = True  # 是否使用百分位条件
+    USE_MACD_CONDITION = True        # 是否使用MACD条件
+    USE_BOLL_CONDITION = True        # 是否使用布林线条件
+    
     # 数据配置
     DATA_INTERVAL = 6  # 数据拉取间隔（秒）
     KLINE_PERIOD = '1min'  # 关注的K线周期
@@ -264,19 +269,39 @@ class PowerWaveIndicator:
         
         return 0
     
-    def check_other_conditions(self, direction):
-        """检查除颜色变化外的其他条件"""
-        # 1. 检查MACD条件
-        macd_ok = self._check_macd_condition(direction)
+    def check_opening_conditions(self, direction):
+        """检查所有开仓条件"""
+        conditions = {}
+        all_satisfied = True
         
-        # 2. 检查布林线条件
-        boll_ok = self._check_boll_condition(direction)
+        # 1. 百分位条件（如果启用）
+        if self.config.USE_PERCENTILE_CONDITION:
+            percentile_ok = self._check_percentile_condition(direction)
+            conditions['百分位'] = percentile_ok
+            all_satisfied = all_satisfied and percentile_ok
+        else:
+            conditions['百分位'] = '已禁用'
+        
+        # 2. MACD条件（如果启用）
+        if self.config.USE_MACD_CONDITION:
+            macd_ok = self._check_macd_condition(direction)
+            conditions['MACD'] = macd_ok
+            all_satisfied = all_satisfied and macd_ok
+        else:
+            conditions['MACD'] = '已禁用'
+        
+        # 3. 布林线条件（如果启用）
+        if self.config.USE_BOLL_CONDITION:
+            boll_ok = self._check_boll_condition(direction)
+            conditions['布林线'] = boll_ok
+            all_satisfied = all_satisfied and boll_ok
+        else:
+            conditions['布林线'] = '已禁用'
         
         # 输出调试信息
-        Logger.debug(f"其他条件检查 - MACD: {macd_ok}, 布林: {boll_ok}")
+        Logger.debug(f"开仓条件检查 - 百分位:{conditions['百分位']}, MACD:{conditions['MACD']}, 布林:{conditions['布林线']}")
         
-        # MACD和布林线条件都满足
-        return macd_ok and boll_ok
+        return all_satisfied, conditions
     
     def _check_macd_condition(self, signal_direction):
         """检查MACD条件"""
@@ -939,29 +964,23 @@ class PowerWaveStrategy:
                     
                     # 如果有颜色变化，记录待开仓信号
                     if color_change != 0:
-                        # 检查百分位条件
-                        percentile_ok = self.indicator._check_percentile_condition(color_change)
+                        prev_color = self.indicator.get_color(-2)
+                        current_color = self.indicator.get_color(-1)
+                        percentile = self.indicator.percentile
                         
-                        if percentile_ok:
-                            prev_color = self.indicator.get_color(-2)
-                            current_color = self.indicator.get_color(-1)
-                            percentile = self.indicator.percentile
-                            
-                            # 设置待开仓信号
-                            self.pending_signal.set_signal(
-                                direction=color_change,
-                                color_from=prev_color,
-                                color_to=current_color,
-                                percentile=percentile,
-                                time=current_time
-                            )
-                            
-                            Logger.info(f"🔔 检测到颜色变化：{prev_color} -> {current_color}")
-                            Logger.info(f"  - 方向: {'做多' if color_change == 1 else '做空'}")
-                            Logger.info(f"  - 百分位: {percentile:.1f}% (满足)")
-                            Logger.info(f"  等待MACD和布林线条件满足...")
-                        else:
-                            Logger.debug(f"颜色变化但百分位不满足，忽略")
+                        # 设置待开仓信号（先不检查百分位）
+                        self.pending_signal.set_signal(
+                            direction=color_change,
+                            color_from=prev_color,
+                            color_to=current_color,
+                            percentile=percentile,
+                            time=current_time
+                        )
+                        
+                        Logger.info(f"🔔 检测到颜色变化：{prev_color} -> {current_color}")
+                        Logger.info(f"  - 方向: {'做多' if color_change == 1 else '做空'}")
+                        Logger.info(f"  - 当前百分位: {percentile:.1f}")
+                        Logger.info(f"  等待所有条件满足...")
                     
                     # 如果有待开仓信号，检查是否满足其他条件
                     if self.pending_signal.active:
@@ -974,18 +993,32 @@ class PowerWaveStrategy:
                                 Logger.info(f"颜色反转，清除待开仓信号")
                                 self.pending_signal.clear()
                             else:
-                                # 检查其他条件
-                                other_conditions_ok = self.indicator.check_other_conditions(self.pending_signal.direction)
+                                # 检查所有条件
+                                all_ok, conditions = self.indicator.check_opening_conditions(self.pending_signal.direction)
                                 
-                                if other_conditions_ok:
+                                if all_ok:
                                     # 满足所有条件，执行开仓
                                     direction = self.pending_signal.direction
                                     Logger.info("✅ 所有条件满足，执行开仓")
                                     Logger.info(f"  - 方向: {'做多' if direction == 1 else '做空'}")
                                     Logger.info(f"  - 颜色: {self.pending_signal.color_from} -> {self.pending_signal.color_to} (第{self.pending_signal.bar_count}根K线后)")
-                                    Logger.info(f"  - MACD: {'金叉' if direction == 1 else '死叉'} ✓")
-                                    Logger.info(f"  - 布林: 价格在中轨{'上方' if direction == 1 else '下方'} ✓")
-                                    Logger.info(f"  - 百分位: {self.pending_signal.percentile_at_signal:.1f}%")
+                                    
+                                    # 输出各条件状态
+                                    for cond_name, cond_status in conditions.items():
+                                        if cond_status == '已禁用':
+                                            Logger.info(f"  - {cond_name}: 已禁用")
+                                        elif cond_status:
+                                            Logger.info(f"  - {cond_name}: ✓ 满足")
+                                        else:
+                                            Logger.info(f"  - {cond_name}: × 不满足")
+                                    
+                                    # 输出具体数值
+                                    if self.indicator.percentile is not None:
+                                        Logger.info(f"  - 当前百分位值: {self.indicator.percentile:.1f}")
+                                    if self.indicator.macd is not None and self.indicator.macd_signal is not None:
+                                        Logger.info(f"  - MACD: DIF={self.indicator.macd.iloc[-1]:.3f}, DEA={self.indicator.macd_signal.iloc[-1]:.3f}")
+                                    if self.indicator.boll_middle is not None:
+                                        Logger.info(f"  - 布林中轨: {self.indicator.boll_middle.iloc[-1]:.2f}, 当前价: {current_price:.2f}")
                                     
                                     if direction == 1:
                                         stop_price = current_price - self.config.HARD_STOP_LOSS_POINTS
@@ -997,7 +1030,16 @@ class PowerWaveStrategy:
                                     # 清除待开仓信号
                                     self.pending_signal.clear()
                                 else:
-                                    Logger.debug(f"待开仓信号({'做多' if self.pending_signal.direction == 1 else '做空'})等待中，第{self.pending_signal.bar_count}根K线")
+                                    # 显示哪些条件未满足
+                                    not_satisfied = []
+                                    for cond_name, cond_status in conditions.items():
+                                        if cond_status != '已禁用' and not cond_status:
+                                            not_satisfied.append(cond_name)
+                                    
+                                    if not_satisfied:
+                                        Logger.debug(f"待开仓信号({'做多' if self.pending_signal.direction == 1 else '做空'})等待中，第{self.pending_signal.bar_count}根K线，未满足: {', '.join(not_satisfied)}")
+                                    else:
+                                        Logger.debug(f"待开仓信号({'做多' if self.pending_signal.direction == 1 else '做空'})等待中，第{self.pending_signal.bar_count}根K线")
                     else:
                         Logger.debug("无有效交易信号")
                         
