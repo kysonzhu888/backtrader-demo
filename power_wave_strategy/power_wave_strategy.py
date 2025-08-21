@@ -827,6 +827,90 @@ class PowerWaveStrategy:
         
         return True, "允许开仓"
     
+    def check_close_conditions(self, current_time):
+        """检查平仓条件（排除强制平仓）"""
+        if self.position.is_empty():
+            return False, "无持仓"
+        
+        # 检查是否在交易时间
+        if not self.trading_helper.is_trading_time(current_time):
+            return False, "非交易时间"
+        
+        # 检查开盘后和收盘前的保护时间（与开仓条件相同的逻辑）
+        current_hour = current_time.hour
+        current_minute = current_time.minute
+        
+        # 获取当前品种的交易时段
+        trade_hours = self.trading_helper.trading_time()
+        
+        for start_str, end_str in trade_hours:
+            start_hour, start_min = map(int, start_str.split(':'))
+            end_hour, end_min = map(int, end_str.split(':'))
+            
+            # 判断是否在当前交易时段内
+            is_in_current_session = False
+            
+            if start_hour < end_hour:
+                # 正常时段（不跨天）
+                if (start_hour < current_hour < end_hour) or \
+                   (start_hour == current_hour and current_minute >= start_min) or \
+                   (end_hour == current_hour and current_minute <= end_min):
+                    is_in_current_session = True
+            else:
+                # 跨天时段（如21:00-02:30）
+                if (current_hour >= start_hour) or (current_hour <= end_hour):
+                    if (current_hour == start_hour and current_minute >= start_min) or \
+                       (current_hour > start_hour) or \
+                       (current_hour < end_hour) or \
+                       (current_hour == end_hour and current_minute <= end_min):
+                        is_in_current_session = True
+            
+            if not is_in_current_session:
+                continue
+                
+            # 检查开盘后保护时间
+            if start_hour == 9 and start_min == 0:  # 早盘
+                if self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN > 0:
+                    protection_end_min = start_min + self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN
+                    if current_hour == start_hour and current_minute < protection_end_min:
+                        minutes_left = protection_end_min - current_minute
+                        return False, f"早盘开盘后保护期，剩余{minutes_left}分钟"
+            
+            elif start_hour == 21 and start_min == 0:  # 夜盘
+                if self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN > 0:
+                    protection_end_min = start_min + self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN
+                    if current_hour == start_hour and current_minute < protection_end_min:
+                        minutes_left = protection_end_min - current_minute
+                        return False, f"夜盘开盘后保护期，剩余{minutes_left}分钟"
+            
+            # 检查收盘前保护时间
+            if self.config.NO_OPEN_MINUTES_BEFORE_CLOSE > 0:
+                # 计算收盘前保护期开始时间
+                protection_start_min = end_min - self.config.NO_OPEN_MINUTES_BEFORE_CLOSE
+                
+                if start_hour < end_hour:
+                    # 正常时段
+                    if (current_hour == end_hour and current_minute >= protection_start_min) or \
+                       (protection_start_min < 0 and current_hour == end_hour - 1 and current_minute >= 60 + protection_start_min):
+                        if protection_start_min < 0:
+                            minutes_left = (60 + protection_start_min) + (60 - current_minute) if current_hour == end_hour - 1 else end_min - current_minute
+                        else:
+                            minutes_left = end_min - current_minute
+                        return False, f"收盘前保护期，剩余{minutes_left}分钟"
+                else:
+                    # 跨天时段（如21:00-02:30）
+                    if current_hour <= end_hour:
+                        # 次日时段（如00:00-02:30）
+                        if (current_hour == end_hour and current_minute >= protection_start_min) or \
+                           (protection_start_min < 0 and current_hour == end_hour - 1 and current_minute >= 60 + protection_start_min):
+                            if protection_start_min < 0:
+                                minutes_left = (60 + protection_start_min) + (60 - current_minute) if current_hour == end_hour - 1 else end_min - current_minute
+                            else:
+                                minutes_left = end_min - current_minute
+                            return False, f"夜盘收盘前保护期，剩余{minutes_left}分钟"
+        
+        return True, "允许平仓"
+    
     def check_force_close(self, current_time):
         """检查是否需要强制平仓"""
         if self.position.is_empty():
@@ -1039,14 +1123,27 @@ class PowerWaveStrategy:
             if not self.position.is_empty():
                 current_color = self.indicator.get_color(-1)
                 
+                # 检查是否有平仓信号
+                should_close = False
+                close_reason = ""
+                
                 if self.position.is_long() and current_color == 'green':
-                    self.close_position(current_price, current_time, "颜色变绿平多")
-                    self.pending_signal.clear()  # 清除待开仓信号
-                    return
+                    should_close = True
+                    close_reason = "颜色变绿平多"
                 elif self.position.is_short() and current_color == 'red':
-                    self.close_position(current_price, current_time, "颜色变红平空")
-                    self.pending_signal.clear()  # 清除待开仓信号
-                    return
+                    should_close = True
+                    close_reason = "颜色变红平空"
+                
+                # 如果有平仓信号，先检查是否允许平仓
+                if should_close:
+                    can_close, reason = self.check_close_conditions(current_time)
+                    if can_close:
+                        self.close_position(current_price, current_time, close_reason)
+                        self.pending_signal.clear()  # 清除待开仓信号
+                        return
+                    else:
+                        Logger.info(f"🔔 检测到平仓信号({close_reason})，但不满足平仓条件: {reason}")
+                        # 不平仓，继续持仓
             
             # 4. 检查开仓信号
             if self.position.is_empty():
@@ -1454,9 +1551,9 @@ class PowerWaveStrategy:
                     profit_loss_line += f"盈利 {profit_count} 笔，单笔最大盈利 {max_profit:.0f} 元"
                 if loss_count > 0:
                     if profit_count > 0:
-                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {abs(max_loss):.0f} 元"
                     else:
-                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {abs(max_loss):.0f} 元"
                 
                 if profit_loss_line:
                     message_lines.append(profit_loss_line)
@@ -1464,7 +1561,7 @@ class PowerWaveStrategy:
                 if total_profit >= 0:
                     message_lines.append(f"总盈利 {total_profit:.0f} 元")
                 else:
-                    message_lines.append(f"总亏损 {abs(total_profit):.0f} 元")
+                    message_lines.append(f"总亏损 {total_profit:.0f} 元")
             
             # 添加当前持仓信息
             if not self.position.is_empty():
@@ -1533,9 +1630,9 @@ class PowerWaveStrategy:
                     profit_loss_line += f"盈利 {profit_count} 笔，单笔最大盈利 {max_profit:.0f} 元"
                 if loss_count > 0:
                     if profit_count > 0:
-                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                        profit_loss_line += f"；亏损 {loss_count} 笔，单笔最大亏损 {abs(max_loss):.0f} 元"
                     else:
-                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {max_loss:.0f} 元"
+                        profit_loss_line += f"亏损 {loss_count} 笔，单笔最大亏损 {abs(max_loss):.0f} 元"
                 
                 if profit_loss_line:
                     message_lines.append(profit_loss_line)
@@ -1543,7 +1640,7 @@ class PowerWaveStrategy:
                 if total_profit >= 0:
                     message_lines.append(f"总盈利 {total_profit:.0f} 元")
                 else:
-                    message_lines.append(f"总亏损 {abs(total_profit):.0f} 元")
+                    message_lines.append(f"总亏损 {total_profit:.0f} 元")
             
             message = "\n".join(message_lines)
             send_message(message, self.config.WECHAT_GROUP)
