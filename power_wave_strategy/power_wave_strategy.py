@@ -89,11 +89,8 @@ class PowerWaveConfig:
     NO_OPEN_MINUTES_BEFORE_CLOSE = 15  # 收盘前不开仓时间（分钟）
     NO_OPEN_MINUTES_AFTER_LOSS = 30  # 止损后不开仓时间（分钟）
     
-    # 强制平仓时间
-    FORCE_CLOSE_TIMES = [
-        (14, 58),  # 白天收盘前2分钟
-        (22, 58),  # 晚上收盘前2分钟（沪金夜盘到02:30，这里设置22:58是为了避免隔夜）
-    ]
+    # 强制平仓时间（收盘前分钟数）
+    FORCE_CLOSE_MINUTES_BEFORE_END = 5  # 收盘前5分钟强制平仓
     
     # 微信播报
     WECHAT_GROUP = "动力波策略群"
@@ -751,19 +748,75 @@ class PowerWaveStrategy:
         # 检查开盘后和收盘前的保护时间
         current_hour = current_time.hour
         current_minute = current_time.minute
-        time_val = current_hour * 100 + current_minute
         
-        # 开盘后保护
-        if self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN > 0:
-            if 900 <= time_val < (900 + self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN):
-                minutes_left = 900 + self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN - time_val
-                return False, f"早盘开盘后保护期，剩余{minutes_left}分钟"
+        # 获取当前品种的交易时段
+        trade_hours = self.trading_helper.trading_time()
         
-        # 夜盘开盘后保护
-        if self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN > 0:
-            if 2100 <= time_val < (2100 + self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN):
-                minutes_left = 2100 + self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN - time_val
-                return False, f"夜盘开盘后保护期，剩余{minutes_left}分钟"
+        for start_str, end_str in trade_hours:
+            start_hour, start_min = map(int, start_str.split(':'))
+            end_hour, end_min = map(int, end_str.split(':'))
+            
+            # 判断是否在当前交易时段内
+            is_in_current_session = False
+            
+            if start_hour < end_hour:
+                # 正常时段（不跨天）
+                if (start_hour < current_hour < end_hour) or \
+                   (start_hour == current_hour and current_minute >= start_min) or \
+                   (end_hour == current_hour and current_minute <= end_min):
+                    is_in_current_session = True
+            else:
+                # 跨天时段（如21:00-02:30）
+                if (current_hour >= start_hour) or (current_hour <= end_hour):
+                    if (current_hour == start_hour and current_minute >= start_min) or \
+                       (current_hour > start_hour) or \
+                       (current_hour < end_hour) or \
+                       (current_hour == end_hour and current_minute <= end_min):
+                        is_in_current_session = True
+            
+            if not is_in_current_session:
+                continue
+                
+            # 检查开盘后保护时间
+            if start_hour == 9 and start_min == 0:  # 早盘
+                if self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN > 0:
+                    protection_end_min = start_min + self.config.NO_OPEN_MINUTES_AFTER_MORNING_OPEN
+                    if current_hour == start_hour and current_minute < protection_end_min:
+                        minutes_left = protection_end_min - current_minute
+                        return False, f"早盘开盘后保护期，剩余{minutes_left}分钟"
+            
+            elif start_hour == 21 and start_min == 0:  # 夜盘
+                if self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN > 0:
+                    protection_end_min = start_min + self.config.NO_OPEN_MINUTES_AFTER_NIGHT_OPEN
+                    if current_hour == start_hour and current_minute < protection_end_min:
+                        minutes_left = protection_end_min - current_minute
+                        return False, f"夜盘开盘后保护期，剩余{minutes_left}分钟"
+            
+            # 检查收盘前保护时间
+            if self.config.NO_OPEN_MINUTES_BEFORE_CLOSE > 0:
+                # 计算收盘前保护期开始时间
+                protection_start_min = end_min - self.config.NO_OPEN_MINUTES_BEFORE_CLOSE
+                
+                if start_hour < end_hour:
+                    # 正常时段
+                    if (current_hour == end_hour and current_minute >= protection_start_min) or \
+                       (protection_start_min < 0 and current_hour == end_hour - 1 and current_minute >= 60 + protection_start_min):
+                        if protection_start_min < 0:
+                            minutes_left = (60 + protection_start_min) + (60 - current_minute) if current_hour == end_hour - 1 else end_min - current_minute
+                        else:
+                            minutes_left = end_min - current_minute
+                        return False, f"收盘前保护期，剩余{minutes_left}分钟"
+                else:
+                    # 跨天时段（如21:00-02:30）
+                    if current_hour <= end_hour:
+                        # 次日时段（如00:00-02:30）
+                        if (current_hour == end_hour and current_minute >= protection_start_min) or \
+                           (protection_start_min < 0 and current_hour == end_hour - 1 and current_minute >= 60 + protection_start_min):
+                            if protection_start_min < 0:
+                                minutes_left = (60 + protection_start_min) + (60 - current_minute) if current_hour == end_hour - 1 else end_min - current_minute
+                            else:
+                                minutes_left = end_min - current_minute
+                            return False, f"夜盘收盘前保护期，剩余{minutes_left}分钟"
         
         # 止损后保护
         if self.last_loss_time:
@@ -782,10 +835,49 @@ class PowerWaveStrategy:
         current_hour = current_time.hour
         current_minute = current_time.minute
         
-        for close_hour, close_minute in self.config.FORCE_CLOSE_TIMES:
-            # 检查是否到强制平仓时间
-            if current_hour == close_hour and current_minute >= close_minute:
-                return True, "收盘前强制平仓"
+        # 获取当前品种的交易时段并检查是否需要强制平仓
+        trade_hours = self.trading_helper.trading_time()
+        
+        for start_str, end_str in trade_hours:
+            start_hour, start_min = map(int, start_str.split(':'))
+            end_hour, end_min = map(int, end_str.split(':'))
+            
+            # 判断是否在当前交易时段内
+            is_in_current_session = False
+            
+            if start_hour < end_hour:
+                # 正常时段（不跨天）
+                if (start_hour < current_hour < end_hour) or \
+                   (start_hour == current_hour and current_minute >= start_min) or \
+                   (end_hour == current_hour and current_minute <= end_min):
+                    is_in_current_session = True
+            else:
+                # 跨天时段（如21:00-02:30）
+                if (current_hour >= start_hour) or (current_hour <= end_hour):
+                    if (current_hour == start_hour and current_minute >= start_min) or \
+                       (current_hour > start_hour) or \
+                       (current_hour < end_hour) or \
+                       (current_hour == end_hour and current_minute <= end_min):
+                        is_in_current_session = True
+            
+            if not is_in_current_session:
+                continue
+                
+            # 在当前交易时段内，检查是否到了强制平仓时间
+            force_close_min = end_min - self.config.FORCE_CLOSE_MINUTES_BEFORE_END
+            
+            if start_hour < end_hour:
+                # 正常时段
+                if (current_hour == end_hour and current_minute >= force_close_min) or \
+                   (force_close_min < 0 and current_hour == end_hour - 1 and current_minute >= 60 + force_close_min):
+                    return True, f"收盘前{self.config.FORCE_CLOSE_MINUTES_BEFORE_END}分钟强制平仓"
+            else:
+                # 跨天时段（如21:00-02:30）
+                if current_hour <= end_hour:
+                    # 次日时段（如00:00-02:30）
+                    if (current_hour == end_hour and current_minute >= force_close_min) or \
+                       (force_close_min < 0 and current_hour == end_hour - 1 and current_minute >= 60 + force_close_min):
+                        return True, f"夜盘收盘前{self.config.FORCE_CLOSE_MINUTES_BEFORE_END}分钟强制平仓"
                 
         return False, None
     
