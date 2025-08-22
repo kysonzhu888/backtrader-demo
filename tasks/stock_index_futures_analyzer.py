@@ -13,6 +13,8 @@ import csv
 import urllib.request
 import urllib.error
 import ssl
+import subprocess
+import platform
 
 from time import sleep
 
@@ -50,6 +52,10 @@ class FuturesAnalyzerConfig:
     max_download_retries: int = 3  # 单个文件最大重试次数
     max_analysis_retries: int = 3  # 整体分析最大重试次数
     retry_wait_seconds: int = 60  # 重试等待时间（秒）
+    
+    # 下载方式配置
+    use_system_downloader: bool = True  # 优先使用系统工具下载（PowerShell/curl/wget）
+    fallback_to_requests: bool = True   # 系统工具失败后是否尝试requests
     
     # 文件配置
     min_file_size_bytes: int = 1000  # 有效文件最小大小（字节）
@@ -295,13 +301,29 @@ class FuturesNetShortAnalyzer:
             retry_msg = f"(重试第{retry_count}次)" if retry_count > 0 else ""
             Logger.info(f"开始下载 {contract} 数据{retry_msg}: {url}")
             
+            # 先访问主页获取cookie（模拟浏览器行为）
+            if retry_count == 0:
+                try:
+                    Logger.info("访问主页获取session...")
+                    main_page_headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    }
+                    self.session.get(self.config.base_url, headers=main_page_headers, timeout=5)
+                    sleep(1)  # 模拟人类延迟
+                except:
+                    pass  # 忽略主页访问错误
+            
             headers = {
+                'Host': 'www.cffex.com.cn',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
                 'Accept-Encoding': 'gzip, deflate',
                 'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'max-age=0',
+                'Referer': 'http://www.cffex.com.cn/'
             }
             
             # 使用配置的超时时间
@@ -417,6 +439,159 @@ class FuturesNetShortAnalyzer:
             Logger.error(f"urllib下载失败: {e}")
         
         return None
+    
+    def download_with_system_tool(self, contract: str, url: str, date: datetime) -> Optional[str]:
+        """
+        使用系统工具（PowerShell/curl/wget）下载CSV
+        
+        Args:
+            contract: 合约代码
+            url: 下载URL
+            date: 日期
+            
+        Returns:
+            Optional[str]: 本地文件路径，失败返回None
+        """
+        date_str = date.strftime("%Y%m%d")
+        file_path = os.path.join(self.data_dir, f"{contract}_{date_str}.csv")
+        
+        # 如果文件已存在且大小合理，直接使用
+        if os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+            if file_size > self.config.min_file_size_bytes:
+                Logger.info(f"{contract} 使用已存在的数据: {file_path} ({file_size}字节)")
+                return file_path
+        
+        system = platform.system()
+        Logger.info(f"使用系统工具下载 {contract} (系统: {system})")
+        
+        # Windows系统使用PowerShell
+        if system == 'Windows':
+            if self._download_with_powershell(url, file_path):
+                return file_path
+        
+        # 尝试curl（跨平台）
+        if self._download_with_curl(url, file_path):
+            return file_path
+        
+        # 尝试wget
+        if self._download_with_wget(url, file_path):
+            return file_path
+        
+        Logger.warning(f"系统工具无法下载 {contract}")
+        return None
+    
+    def _download_with_powershell(self, url: str, output_file: str) -> bool:
+        """使用PowerShell下载（Windows）"""
+        try:
+            ps_command = f'''
+            $headers = @{{
+                "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "Accept" = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                "Accept-Language" = "zh-CN,zh;q=0.9"
+                "Referer" = "http://www.cffex.com.cn/"
+            }}
+            
+            try {{
+                Invoke-WebRequest -Uri "{url}" -OutFile "{output_file}" -Headers $headers -TimeoutSec 30
+                Write-Host "Success"
+            }} catch {{
+                Write-Host "Failed: $_"
+                exit 1
+            }}
+            '''
+            
+            Logger.info(f"执行PowerShell下载...")
+            result = subprocess.run(
+                ['powershell', '-Command', ps_command],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode == 0 and os.path.exists(output_file):
+                file_size = os.path.getsize(output_file)
+                if file_size > 100:
+                    Logger.info(f"✅ PowerShell下载成功: {output_file} ({file_size}字节)")
+                    return True
+            
+            Logger.debug(f"PowerShell下载失败: {result.stderr}")
+            return False
+            
+        except Exception as e:
+            Logger.debug(f"PowerShell执行错误: {e}")
+            return False
+    
+    def _download_with_curl(self, url: str, output_file: str) -> bool:
+        """使用curl下载（跨平台）"""
+        try:
+            curl_command = [
+                'curl',
+                '-L',  # 跟随重定向
+                '-o', output_file,
+                '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                '-H', 'Accept-Language: zh-CN,zh;q=0.9',
+                '-H', 'Referer: http://www.cffex.com.cn/',
+                '--connect-timeout', '30',
+                '--max-time', '60',
+                '-s',  # 静默模式
+                url
+            ]
+            
+            Logger.info(f"执行curl下载...")
+            result = subprocess.run(curl_command, capture_output=True, text=True, timeout=90)
+            
+            if result.returncode == 0 and os.path.exists(output_file):
+                file_size = os.path.getsize(output_file)
+                if file_size > 100:
+                    Logger.info(f"✅ curl下载成功: {output_file} ({file_size}字节)")
+                    return True
+            
+            Logger.debug(f"curl下载失败: {result.stderr}")
+            return False
+            
+        except FileNotFoundError:
+            Logger.debug("curl命令未找到")
+            return False
+        except Exception as e:
+            Logger.debug(f"curl执行错误: {e}")
+            return False
+    
+    def _download_with_wget(self, url: str, output_file: str) -> bool:
+        """使用wget下载"""
+        try:
+            wget_command = [
+                'wget',
+                '-O', output_file,
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                '--header=Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                '--header=Accept-Language: zh-CN,zh;q=0.9',
+                '--header=Referer: http://www.cffex.com.cn/',
+                '--timeout=30',
+                '--tries=3',
+                '-q',  # 静默模式
+                url
+            ]
+            
+            Logger.info(f"执行wget下载...")
+            result = subprocess.run(wget_command, capture_output=True, text=True, timeout=90)
+            
+            if result.returncode == 0 and os.path.exists(output_file):
+                file_size = os.path.getsize(output_file)
+                if file_size > 100:
+                    Logger.info(f"✅ wget下载成功: {output_file} ({file_size}字节)")
+                    return True
+            
+            Logger.debug(f"wget下载失败: {result.stderr}")
+            return False
+            
+        except FileNotFoundError:
+            Logger.debug("wget命令未找到")
+            return False
+        except Exception as e:
+            Logger.debug(f"wget执行错误: {e}")
+            return False
     
     def parse_csv(self, file_path: str) -> List[PositionData]:
         """
@@ -702,7 +877,18 @@ class FuturesNetShortAnalyzer:
             failed_contracts = []
             
             for contract, url in urls.items():
-                file_path = self.download_csv(contract, url, target_date)
+                file_path = None
+                
+                # 优先使用系统工具下载
+                if self.config.use_system_downloader:
+                    Logger.info(f"尝试使用系统工具下载 {contract}")
+                    file_path = self.download_with_system_tool(contract, url, target_date)
+                
+                # 如果系统工具失败，且允许回退到requests
+                if not file_path and self.config.fallback_to_requests:
+                    Logger.info(f"系统工具失败，尝试使用requests下载 {contract}")
+                    file_path = self.download_csv(contract, url, target_date)
+                
                 if file_path:
                     downloaded_files.append((contract, file_path))
                 else:
