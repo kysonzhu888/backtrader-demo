@@ -14,6 +14,8 @@ import csv
 from time import sleep
 
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
@@ -25,6 +27,58 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from utils.logger_utils import Logger
 from utils.wechat import send_message, send_message_to_multiple_recipients
+
+
+@dataclass
+class FuturesAnalyzerConfig:
+    """股指期货分析器配置"""
+    
+    # 运行时间配置
+    scheduled_hour: int = 16  # 每天运行的小时（24小时制）
+    scheduled_minute: int = 0  # 每天运行的分钟
+    check_interval_minutes: int = 60  # 检查间隔（分钟）
+    
+    # 数据切换时间配置
+    data_switch_hour: int = 16  # 下午几点后使用今天的数据（否则用昨天的）
+    
+    # 网络配置
+    connection_timeout: int = 10  # 连接超时（秒）
+    read_timeout: int = 20  # 读取超时（秒）
+    max_download_retries: int = 3  # 单个文件最大重试次数
+    max_analysis_retries: int = 3  # 整体分析最大重试次数
+    retry_wait_seconds: int = 60  # 重试等待时间（秒）
+    
+    # 文件配置
+    min_file_size_bytes: int = 1000  # 有效文件最小大小（字节）
+    data_dir_name: str = 'futures_data'  # 数据目录名
+    
+    # 分析配置
+    low_threshold: int = 65000   # 净空单量低阈值（适合做多）
+    high_threshold: int = 110000  # 净空单量高阈值（适合做空）
+    
+    # 微信通知配置
+    enable_startup_notification: bool = True  # 是否发送启动通知
+    enable_error_notification: bool = True   # 是否发送错误通知
+    
+    # 合约配置
+    contracts: list = field(default_factory=lambda: ['IF', 'IH', 'IC', 'IM'])
+    
+    # URL配置
+    base_url: str = "http://www.cffex.com.cn"
+    url_template: str = "http://www.cffex.com.cn/sj/ccpm/{date}/{contract}_1.csv"
+    
+    # 中信证券名称匹配
+    zx_names: list = field(default_factory=lambda: ['中信期货(代客)', '中信证券', '中信期货'])
+    
+    def get_scheduled_time_str(self) -> str:
+        """获取计划执行时间的字符串表示"""
+        return f"{self.scheduled_hour:02d}:{self.scheduled_minute:02d}"
+    
+    def is_scheduled_time(self, hour: int, minute: int = None) -> bool:
+        """检查是否为计划执行时间"""
+        if minute is None:
+            return hour == self.scheduled_hour
+        return hour == self.scheduled_hour and minute == self.scheduled_minute
 
 
 @dataclass
@@ -84,21 +138,53 @@ class ContractSummary:
 class FuturesNetShortAnalyzer:
     """股指期货净空单量分析器"""
     
-    # 四个股指期货代码
-    CONTRACTS = ['IF', 'IH', 'IC', 'IM']
-    
-    # 中金所数据URL模板
-    URL_TEMPLATE = "http://www.cffex.com.cn/sj/ccpm/{date}/{contract}_1.csv"
-    
-    # 中信证券的可能名称
-    ZX_NAMES = ['中信期货(代客)', '中信证券', '中信期货']
-    
-    def __init__(self):
+    def __init__(self, config: FuturesAnalyzerConfig = None):
         """初始化"""
-        self.data_dir = os.path.join(os.path.dirname(__file__), 'futures_data')
+        self.config = config or FuturesAnalyzerConfig()
+        self.data_dir = os.path.join(os.path.dirname(__file__), self.config.data_dir_name)
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir)
+        
+        # 创建带有重试策略的requests session
+        self.session = requests.Session()
+        
+        # 配置重试策略
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        
+        # 配置HTTP适配器
+        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=20)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        
         Logger.info("股指期货净空单量分析器初始化完成")
+    
+    def test_connection(self) -> bool:
+        """
+        测试网络连接到中金所官网
+        
+        Returns:
+            bool: 连接是否成功
+        """
+        try:
+            Logger.info("测试网络连接到中金所官网...")
+            response = self.session.get(
+                self.config.base_url, 
+                timeout=(5, 10),
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            if response.status_code == 200:
+                Logger.info("网络连接正常")
+                return True
+            else:
+                Logger.warning(f"网络连接异常，状态码: {response.status_code}")
+                return False
+        except Exception as e:
+            Logger.warning(f"网络连接测试失败: {e}")
+            return False
     
     def generate_urls(self, date: datetime) -> Dict[str, str]:
         """
@@ -114,8 +200,8 @@ class FuturesNetShortAnalyzer:
         date_path = date.strftime("%Y%m/%d")
         
         urls = {}
-        for contract in self.CONTRACTS:
-            urls[contract] = self.URL_TEMPLATE.format(
+        for contract in self.config.contracts:
+            urls[contract] = self.config.url_template.format(
                 date=date_path, 
                 contract=contract
             )
@@ -131,7 +217,7 @@ class FuturesNetShortAnalyzer:
         """
         now = datetime.now()
         
-        if now.hour < 16:  # 下午4点前
+        if now.hour < self.config.data_switch_hour:  # 配置的时间点前
             target_date = now - timedelta(days=1)
             Logger.info(f"当前时间{now.strftime('%H:%M')}，使用昨天的数据: {target_date.strftime('%Y-%m-%d')}")
         else:
@@ -149,41 +235,96 @@ class FuturesNetShortAnalyzer:
         
         return target_date
     
-    def download_csv(self, contract: str, url: str, date: datetime) -> Optional[str]:
+    def download_csv(self, contract: str, url: str, date: datetime, retry_count: int = 0) -> Optional[str]:
         """
-        下载CSV数据并保存到本地
+        下载CSV数据并保存到本地，支持重试
         
         Args:
             contract: 合约代码
             url: 下载URL
             date: 日期
+            retry_count: 当前重试次数
             
         Returns:
             Optional[str]: 本地文件路径，失败返回None
         """
         date_str = date.strftime("%Y%m%d")
         file_path = os.path.join(self.data_dir, f"{contract}_{date_str}.csv")
+        max_retries = self.config.max_download_retries
+        
+        # 如果文件已存在且不是今天的文件，直接使用
+        if os.path.exists(file_path) and date.date() != datetime.now().date():
+            Logger.info(f"{contract} 使用已存在的历史数据: {file_path}")
+            return file_path
+        
+        # 如果是今天的文件且已存在且大小合理，也可以使用（避免重复下载）
+        if os.path.exists(file_path) and date.date() == datetime.now().date():
+            file_size = os.path.getsize(file_path)
+            if file_size > self.config.min_file_size_bytes:  # 文件大小超过配置值认为是有效的
+                Logger.info(f"{contract} 使用已存在的今日数据: {file_path} ({file_size}字节)")
+                return file_path
         
         try:
-            Logger.info(f"开始下载 {contract} 数据: {url}")
+            retry_msg = f"(重试第{retry_count}次)" if retry_count > 0 else ""
+            Logger.info(f"开始下载 {contract} 数据{retry_msg}: {url}")
             
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
             }
             
-            response = requests.get(url, headers=headers, timeout=30)
+            # 使用配置的超时时间
+            response = self.session.get(
+                url, 
+                headers=headers, 
+                timeout=(self.config.connection_timeout, self.config.read_timeout),
+                allow_redirects=True
+            )
             response.raise_for_status()
+            
+            # 检查响应内容
+            if len(response.content) < 100:
+                raise Exception(f"响应内容太短({len(response.content)}字节)，可能是错误页面")
             
             # 保存文件
             with open(file_path, 'wb') as f:
                 f.write(response.content)
             
-            Logger.info(f"{contract} 数据下载成功: {file_path}")
+            Logger.info(f"{contract} 数据下载成功: {file_path} ({len(response.content)}字节)")
             return file_path
             
+        except requests.exceptions.Timeout as e:
+            Logger.warning(f"下载 {contract} 数据超时: {e}")
+            # 超时重试
+            if retry_count < max_retries:
+                sleep_time = min(10 + retry_count * 5, 30)  # 递增等待时间
+                Logger.info(f"等待{sleep_time}秒后重试...")
+                sleep(sleep_time)
+                return self.download_csv(contract, url, date, retry_count + 1)
+            
+        except requests.exceptions.ConnectionError as e:
+            Logger.warning(f"下载 {contract} 数据连接错误: {e}")
+            # 连接错误重试
+            if retry_count < max_retries:
+                sleep_time = min(15 + retry_count * 10, 60)  # 更长的等待时间
+                Logger.info(f"网络连接问题，等待{sleep_time}秒后重试...")
+                sleep(sleep_time)
+                return self.download_csv(contract, url, date, retry_count + 1)
+                
         except Exception as e:
             Logger.error(f"下载 {contract} 数据失败: {e}")
-            return None
+            # 其他错误重试
+            if retry_count < max_retries:
+                sleep_time = min(5 + retry_count * 5, 20)
+                Logger.info(f"等待{sleep_time}秒后重试...")
+                sleep(sleep_time)
+                return self.download_csv(contract, url, date, retry_count + 1)
+            
+        return None
     
     def parse_csv(self, file_path: str) -> List[PositionData]:
         """
@@ -307,7 +448,7 @@ class FuturesNetShortAnalyzer:
             summary = summaries[contract]
             
             # 判断是否为中信
-            is_zx = any(zx_name in position.broker for zx_name in self.ZX_NAMES)
+            is_zx = any(zx_name in position.broker for zx_name in self.config.zx_names)
             
             if position.buy_volume > 0:  # 买单数据
                 if is_zx:
@@ -354,7 +495,7 @@ class FuturesNetShortAnalyzer:
         others_total_change = 0
         others_details = []
         
-        for contract in self.CONTRACTS:
+        for contract in self.config.contracts:
             if contract in summaries:
                 summary = summaries[contract]
                 
@@ -407,29 +548,56 @@ class FuturesNetShortAnalyzer:
         
         # 交易建议
         report_lines.append("")
-        if total_net_short < 65000:
-            report_lines.append("💡 净空单量位于6.5万以下，适合做多")
-        elif total_net_short > 110000:
-            report_lines.append("💡 净空单量超过11万，适合做空")
+        if total_net_short < self.config.low_threshold:
+            report_lines.append(f"💡 净空单量位于{self.config.low_threshold/10000:.1f}万以下，适合做多")
+        elif total_net_short > self.config.high_threshold:
+            report_lines.append(f"💡 净空单量超过{self.config.high_threshold/10000:.1f}万，适合做空")
         else:
             report_lines.append("💡 净空单量处于中性区间，观望为主")
         
         return "\n".join(report_lines)
     
-    def run_analysis(self, retry_count=0, max_retries=3) -> bool:
+    def _send_error_notification(self, error_message: str):
+        """
+        发送错误通知到微信
+        
+        Args:
+            error_message: 错误消息
+        """
+        if not self.config.enable_error_notification:
+            return
+            
+        try:
+            success = send_message_to_multiple_recipients(error_message, [group_chat_name_dlb, group_chat_name_vip])
+            if success:
+                Logger.info("错误通知已发送到微信")
+            else:
+                Logger.warning("发送错误通知到微信失败")
+        except Exception as e:
+            Logger.error(f"发送错误通知异常: {e}")
+    
+    def run_analysis(self, retry_count=0, max_retries=None) -> bool:
         """
         运行完整的分析流程，支持重试
         
         Args:
             retry_count: 当前重试次数
-            max_retries: 最大重试次数
+            max_retries: 最大重试次数（None时使用配置值）
             
         Returns:
             bool: 是否成功
         """
+        if max_retries is None:
+            max_retries = self.config.max_analysis_retries
+            
         try:
             retry_msg = f"重试第{retry_count}次" if retry_count > 0 else ""
             Logger.info(f"开始股指期货净空单量分析...{retry_msg}")
+            
+            # 0. 测试网络连接（仅首次尝试时测试）
+            if retry_count == 0:
+                if not self.test_connection():
+                    Logger.warning("网络连接测试失败，但仍尝试继续执行...")
             
             # 1. 确定目标日期
             target_date = self.get_target_date()
@@ -439,20 +607,36 @@ class FuturesNetShortAnalyzer:
             
             # 3. 下载CSV数据
             downloaded_files = []
+            failed_contracts = []
+            
             for contract, url in urls.items():
                 file_path = self.download_csv(contract, url, target_date)
                 if file_path:
                     downloaded_files.append((contract, file_path))
+                else:
+                    failed_contracts.append(contract)
             
+            # 检查下载结果
             if not downloaded_files:
-                Logger.error("没有成功下载任何数据文件")
+                error_msg = "所有合约数据下载失败"
+                Logger.error(error_msg)
+                # 发送失败通知
+                self._send_error_notification(f"❌ 股指期货分析失败\n{error_msg}\n日期: {target_date.strftime('%Y-%m-%d')}")
                 # 尝试重试
                 if retry_count < max_retries:
-                    Logger.info(f"等待30秒后重试...")
+                    Logger.info(f"等待{self.config.retry_wait_seconds}秒后重试...")
                     import time
-                    time.sleep(30)
+                    time.sleep(self.config.retry_wait_seconds)
                     return self.run_analysis(retry_count + 1, max_retries)
                 return False
+            elif failed_contracts:
+                error_msg = f"部分合约下载失败: {failed_contracts}"
+                Logger.error(error_msg)
+                # 发送失败通知
+                self._send_error_notification(f"⚠️ 股指期货分析部分失败\n{error_msg}\n成功下载: {[c for c, _ in downloaded_files]}\n日期: {target_date.strftime('%Y-%m-%d')}")
+                return False
+            else:
+                Logger.info(f"所有合约数据下载成功: {[c for c, _ in downloaded_files]}")
             
             # 4. 解析CSV数据
             all_positions = []
@@ -461,7 +645,10 @@ class FuturesNetShortAnalyzer:
                 all_positions.extend(positions)
             
             if not all_positions:
-                Logger.error("没有解析到任何持仓数据")
+                error_msg = "没有解析到任何持仓数据"
+                Logger.error(error_msg)
+                # 发送失败通知
+                self._send_error_notification(f"❌ 股指期货分析失败\n{error_msg}\n日期: {target_date.strftime('%Y-%m-%d')}")
                 return False
             
             # 5. 分析数据
@@ -488,12 +675,18 @@ class FuturesNetShortAnalyzer:
             return True
             
         except Exception as e:
-            Logger.error(f"分析过程出错: {e}")
+            error_msg = f"分析过程出错: {e}"
+            Logger.error(error_msg)
+            # 发送失败通知
+            try:
+                self._send_error_notification(f"❌ 股指期货分析异常\n{error_msg}\n重试次数: {retry_count}/{max_retries}")
+            except:
+                pass  # 避免通知发送失败影响重试逻辑
             # 尝试重试
             if retry_count < max_retries:
-                Logger.info(f"等待30秒后重试...")
+                Logger.info(f"等待{self.config.retry_wait_seconds}秒后重试...")
                 import time
-                time.sleep(30)
+                time.sleep(self.config.retry_wait_seconds)
                 return self.run_analysis(retry_count + 1, max_retries)
             return False
 
