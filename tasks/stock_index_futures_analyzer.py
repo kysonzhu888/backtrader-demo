@@ -691,13 +691,19 @@ class FuturesNetShortAnalyzer:
             return False
 
 
-def run_stock_index_futures_analysis(first_run=False):
+def run_stock_index_futures_analysis(config: FuturesAnalyzerConfig = None, first_run=False):
     """
     定时执行股指期货净空单分析
-    每天16:00执行
+    
+    Args:
+        config: 分析器配置，None时使用默认配置
+        first_run: 是否为首次运行
     """
     from threading import Timer
     from datetime import datetime
+
+    if config is None:
+        config = FuturesAnalyzerConfig()
 
     # 获取当前时间
     now = datetime.now()
@@ -705,18 +711,18 @@ def run_stock_index_futures_analysis(first_run=False):
     current_minute = now.minute
     
     # 首次启动时发送通知
-    if first_run:
-        startup_msg = f"🚀 股指期货分析器已启动\n⏰ 将在每天16:00自动执行分析\n📍 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+    if first_run and config.enable_startup_notification:
+        startup_msg = f"🚀 股指期货分析器已启动\n⏰ 将在每天{config.get_scheduled_time_str()}自动执行分析\n📍 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}"
         try:
             send_message(group_chat_name_dlb, startup_msg)
             Logger.info("启动通知已发送到老公老婆群")
         except Exception as e:
             Logger.warning(f"发送启动通知失败: {e}")
     
-    if current_hour == 16:  # 每天16:00执行
+    if config.is_scheduled_time(current_hour):  # 配置的时间执行
         Logger.info("股指期货净空单分析任务开始执行...", save_to_file=True)
         
-        analyzer = FuturesNetShortAnalyzer()
+        analyzer = FuturesNetShortAnalyzer(config)
         success = analyzer.run_analysis()
         
         if success:
@@ -725,24 +731,31 @@ def run_stock_index_futures_analysis(first_run=False):
             Logger.error("股指期货净空单量分析失败", save_to_file=True)
     else:
         # 计算距离下次执行的时间
-        if current_hour < 16:
-            hours_to_wait = 16 - current_hour
+        scheduled_hour = config.scheduled_hour
+        if current_hour < scheduled_hour:
+            hours_to_wait = scheduled_hour - current_hour
             minutes_to_wait = -current_minute
         else:
-            hours_to_wait = 24 - current_hour + 16
+            hours_to_wait = 24 - current_hour + scheduled_hour
             minutes_to_wait = -current_minute
         
         total_minutes = hours_to_wait * 60 + minutes_to_wait
-        Logger.info(f"当前时间 {now.strftime('%H:%M')}，股指期货分析任务将在约{total_minutes}分钟后（16:00）执行")
+        Logger.info(f"当前时间 {now.strftime('%H:%M')}，股指期货分析任务将在约{total_minutes}分钟后（{config.get_scheduled_time_str()}）执行")
     
-    # 每小时检查一次
-    Timer(60 * 60, lambda: run_stock_index_futures_analysis(False)).start()
+    # 使用配置的检查间隔
+    check_interval = config.check_interval_minutes * 60
+    Timer(check_interval, lambda: run_stock_index_futures_analysis(config, False)).start()
 
 
 def main():
     """主函数 - 用于直接测试"""
     sleep(random.randint(1,20))
 
+    # 可以在这里自定义配置，例如：
+    # config = FuturesAnalyzerConfig()
+    # config.scheduled_hour = 15  # 改为15点执行
+    # config.low_threshold = 70000  # 调整阈值
+    
     analyzer = FuturesNetShortAnalyzer()
     success = analyzer.run_analysis()
     if success:
