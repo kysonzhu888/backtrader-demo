@@ -10,6 +10,9 @@ import os
 import random
 import sys
 import csv
+import urllib.request
+import urllib.error
+import ssl
 
 from time import sleep
 
@@ -64,8 +67,14 @@ class FuturesAnalyzerConfig:
     contracts: list = field(default_factory=lambda: ['IF', 'IH', 'IC', 'IM'])
     
     # URL配置
+    use_https: bool = False  # 是否使用HTTPS（有些网络环境需要）
     base_url: str = "http://www.cffex.com.cn"
     url_template: str = "http://www.cffex.com.cn/sj/ccpm/{date}/{contract}_1.csv"
+    
+    # 代理配置（如果需要）
+    use_proxy: bool = False
+    http_proxy: str = None  # 例如: "http://127.0.0.1:7890"
+    https_proxy: str = None  # 例如: "http://127.0.0.1:7890"
     
     # 中信证券名称匹配
     zx_names: list = field(default_factory=lambda: ['中信期货(代客)', '中信证券', '中信期货'])
@@ -79,6 +88,13 @@ class FuturesAnalyzerConfig:
         if minute is None:
             return hour == self.scheduled_hour
         return hour == self.scheduled_hour and minute == self.scheduled_minute
+    
+    def __post_init__(self):
+        """初始化后处理"""
+        # 如果启用HTTPS，自动调整URL
+        if self.use_https:
+            self.base_url = self.base_url.replace("http://", "https://")
+            self.url_template = self.url_template.replace("http://", "https://")
 
 
 @dataclass
@@ -147,6 +163,17 @@ class FuturesNetShortAnalyzer:
         
         # 创建带有重试策略的requests session
         self.session = requests.Session()
+        
+        # 配置代理（如果启用）
+        if self.config.use_proxy:
+            proxies = {}
+            if self.config.http_proxy:
+                proxies['http'] = self.config.http_proxy
+            if self.config.https_proxy:
+                proxies['https'] = self.config.https_proxy
+            if proxies:
+                self.session.proxies = proxies
+                Logger.info(f"已配置代理: {proxies}")
         
         # 配置重试策略
         retry_strategy = Retry(
@@ -324,6 +351,71 @@ class FuturesNetShortAnalyzer:
                 sleep(sleep_time)
                 return self.download_csv(contract, url, date, retry_count + 1)
             
+        # 最后尝试使用urllib作为备用方案
+        if retry_count == max_retries:
+            Logger.info("尝试使用urllib备用下载方法...")
+            return self._download_csv_urllib(contract, url, date)
+        
+        return None
+    
+    def _download_csv_urllib(self, contract: str, url: str, date: datetime) -> Optional[str]:
+        """
+        使用urllib下载CSV（备用方法）
+        
+        Args:
+            contract: 合约代码
+            url: 下载URL
+            date: 日期
+            
+        Returns:
+            Optional[str]: 本地文件路径，失败返回None
+        """
+        date_str = date.strftime("%Y%m%d")
+        file_path = os.path.join(self.data_dir, f"{contract}_{date_str}.csv")
+        
+        try:
+            Logger.info(f"使用urllib下载 {contract} 数据: {url}")
+            
+            # 创建不验证SSL的context（某些环境需要）
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            # 设置请求头
+            req = urllib.request.Request(url)
+            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            req.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
+            req.add_header('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
+            
+            # 配置代理（如果需要）
+            if self.config.use_proxy and self.config.http_proxy:
+                proxy_handler = urllib.request.ProxyHandler({
+                    'http': self.config.http_proxy,
+                    'https': self.config.https_proxy or self.config.http_proxy
+                })
+                opener = urllib.request.build_opener(proxy_handler)
+                urllib.request.install_opener(opener)
+            
+            # 下载文件
+            with urllib.request.urlopen(req, timeout=30, context=ssl_context) as response:
+                content = response.read()
+                
+                # 检查内容大小
+                if len(content) < 100:
+                    raise Exception(f"响应内容太短({len(content)}字节)")
+                
+                # 保存文件
+                with open(file_path, 'wb') as f:
+                    f.write(content)
+                
+                Logger.info(f"{contract} 数据下载成功(urllib): {file_path} ({len(content)}字节)")
+                return file_path
+                
+        except urllib.error.URLError as e:
+            Logger.error(f"urllib下载失败(URL错误): {e}")
+        except Exception as e:
+            Logger.error(f"urllib下载失败: {e}")
+        
         return None
     
     def parse_csv(self, file_path: str) -> List[PositionData]:
